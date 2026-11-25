@@ -4,6 +4,7 @@ import { registrarEvento } from "@/lib/eventos";
 import { encolarNotificacion } from "@/lib/motor";
 import { crearCupos, DatosRadicacion, normalizarNumero } from "@/lib/radicacion";
 import { ipDe, nuevoToken, permitirEnvio } from "@/lib/seguridad";
+import { clasificarPreliminar } from "@/lib/ia/base-conocimiento";
 
 export const runtime = "nodejs";
 
@@ -37,9 +38,14 @@ export async function POST(req: Request) {
   const abierto = await casoAbierto(aseguradoDoc, beneficiarioDoc);
   if (abierto) return await responderExistente(abierto, d.archivos);
 
+  // Clasificación preliminar instantánea (sin IA): orienta al modelo y queda registrada.
+  const preliminar = clasificarPreliminar(d.relato, d.archivos);
+
   const { data: rec, error } = await db()
     .from("reclamaciones")
     .insert({
+      tipo_preliminar: preliminar.tipo,
+      preliminar,
       idempotency_key: d.idempotency_key,
       beneficiario_nombre: d.beneficiario_nombre,
       beneficiario_tipo_doc: d.beneficiario_tipo_doc,
@@ -73,6 +79,13 @@ export async function POST(req: Request) {
     asegurado_documento: aseguradoDoc,
     beneficiario_documento: beneficiarioDoc,
     archivos_anunciados: d.archivos.map((a) => ({ nombre: a.nombre, mime: a.mime, bytes: a.bytes })),
+  });
+  await registrarEvento(rec.id, "clasificacion_preliminar", "sistema", {
+    tipo: preliminar.tipo,
+    puntajes: preliminar.puntajes,
+    frases: preliminar.frasesEncontradas,
+    pistas_archivos: preliminar.pistasArchivos,
+    explicacion: preliminar.explicacion,
   });
 
   const token = await nuevoEnlace(rec.id);

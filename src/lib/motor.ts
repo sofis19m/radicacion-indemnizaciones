@@ -4,6 +4,7 @@ import { env } from "@/lib/env";
 import { registrarEvento } from "@/lib/eventos";
 import { analizarReclamacion, ErrorIA, VERSION_PROMPT, type RespuestaIA } from "@/lib/ia/analizar";
 import { evaluarExpediente, resumenParaBeneficiario, type DocumentoEvaluable } from "@/lib/expediente";
+import type { Preliminar } from "@/lib/ia/base-conocimiento";
 import {
   DOCUMENTOS_CON_FIRMA,
   normalizarDocumento,
@@ -28,6 +29,8 @@ type Reclamacion = {
   beneficiario_documento: string;
   tipo_sugerido: TipoReclamacion | null;
   tipo_final: TipoReclamacion | null;
+  tipo_preliminar: TipoReclamacion | null;
+  preliminar: Preliminar | null;
   completo_at: string | null;
   primera_respuesta_at: string | null;
   intentos_ia: number;
@@ -70,10 +73,13 @@ export function validarDocumento(
   const asegurado = normalizarDocumento(rec.asegurado_documento);
   const beneficiario = normalizarDocumento(rec.beneficiario_documento);
 
+  // Regla 1: si no se puede leer, es ILEGIBLE (aunque no se sepa con certeza qué documento es).
+  // Al beneficiario se le pide una foto más nítida, que es lo que de verdad necesita hacer.
+  if (!extraido.legible) return { estado: "ilegible", motivo: null };
+  // Regla 2: se lee, pero no es ninguno de los documentos esperados (o el modelo no está seguro).
   if (extraido.tipo === "otro" || extraido.confianza < CONFIANZA_MINIMA_DOC) {
     return { estado: "no_reconocido", motivo: null };
   }
-  if (!extraido.legible) return { estado: "ilegible", motivo: null };
   if (DOCUMENTOS_CON_FIRMA.includes(extraido.tipo) && extraido.tiene_firma === false) {
     return { estado: "sin_firma", motivo: null };
   }
@@ -153,8 +159,12 @@ export async function procesarReclamacion(id: string, actor = "sistema"): Promis
     if (pendientes.length || !rec.tipo_sugerido) {
       const yaRevisados = docs.filter((d) => d.estado !== "pendiente_revision" && d.tipo_detectado);
       const contexto = yaRevisados.length
-        ? `\n\n(Documentos ya recibidos antes en este caso: ${yaRevisados.map((d) => d.tipo_detectado).join(", ")})`
+        ? `DOCUMENTOS YA RECIBIDOS ANTES EN ESTE CASO (no vienen adjuntos ahora): ${yaRevisados.map((d) => d.tipo_detectado).join(", ")}`
         : "";
+      // Pista preliminar (sin IA) calculada al radicar con el relato y los archivos anunciados
+      const pista = rec.preliminar
+        ? `${rec.preliminar.explicacion}${rec.preliminar.frasesEncontradas?.length ? ` Frases detectadas: ${rec.preliminar.frasesEncontradas.map((f) => `"${f.texto}" (${f.tipo})`).join(", ")}.` : ""}${rec.preliminar.pistasArchivos?.length ? ` Archivos: ${rec.preliminar.pistasArchivos.join("; ")}.` : ""}`
+        : undefined;
       const grupos = pendientes.length ? agruparPorTamano(pendientes) : [[]];
 
       for (const grupo of grupos) {
@@ -170,15 +180,18 @@ export async function procesarReclamacion(id: string, actor = "sistema"): Promis
           relato: rec.relato,
           documentos: grupo.map((d, i) => ({ indice: i, documento_id: d.id, sha256: d.sha256, nombre: d.nombre_original })),
           contexto_previo: contexto || null,
+          pista_preliminar: pista ?? null,
         };
 
         let resultado;
         try {
           resultado = await analizarReclamacion({
-            relato: rec.relato + contexto,
+            relato: rec.relato,
             aseguradoNombre: rec.asegurado_nombre,
             beneficiarioNombre: rec.beneficiario_nombre,
             archivos,
+            pistaPreliminar: pista,
+            contextoPrevio: contexto || undefined,
           });
         } catch (e) {
           const err = e as ErrorIA;
@@ -235,7 +248,13 @@ export async function procesarReclamacion(id: string, actor = "sistema"): Promis
         tipo_confianza: Number(respuestaTipo.confianza.toFixed(2)),
         tipo_evidencia: `${respuestaTipo.razon}${respuestaTipo.evidencia ? ` · Cita: "${respuestaTipo.evidencia}"` : ""}`,
       }).eq("id", id);
-      await registrarEvento(id, "tipo_sugerido", "ia", respuestaTipo);
+      await registrarEvento(id, "tipo_sugerido", "ia", { ...respuestaTipo, tipo_preliminar: rec.tipo_preliminar });
+      if (rec.tipo_preliminar && rec.tipo_preliminar !== respuestaTipo.tipo) {
+        // El relato apuntaba a un tipo y los documentos a otro: queda a la vista del analista.
+        await registrarEvento(id, "clasificacion_difiere_de_preliminar", "ia", {
+          preliminar: rec.tipo_preliminar, modelo: respuestaTipo.tipo, razon: respuestaTipo.razon,
+        });
+      }
     }
 
     await db().from("reclamaciones").update({ intentos_ia: 0, ultimo_error_ia: null }).eq("id", id);

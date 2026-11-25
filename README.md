@@ -66,6 +66,14 @@ Sistema para recibir reclamaciones de seguros de vida, determinar si el expedien
 - Antes de pagar u objetar, el analista debe **confirmar o corregir** el tipo sugerido por el modelo. Eso alimenta la métrica de correcciones.
 - No se puede aprobar el pago de un expediente incompleto.
 
+### Cómo se clasifica el tipo de reclamación (en dos momentos)
+El tipo no se le pregunta al beneficiario: se infiere. La lógica vive en una **base de conocimiento** editable (`src/lib/ia/base-conocimiento.ts`) con, para cada tipo, su definición, las frases típicas del relato, los documentos que lo delatan y los casos borde (caída y muerte días después en el hospital, homicidio, suicidio, relato que contradice al documento...).
+
+1. **Clasificación preliminar, al radicar y sin IA.** Se suman puntos por frases del relato (*"le dio un infarto"*, *"lo atropelló un bus"*, *"la junta me calificó"*), por los nombres de los archivos y, como pista débil, por la cantidad de archivos (7 natural, 8 accidental, 6 incapacidad). Es débil a propósito: el 62 % de los expedientes llega incompleto, así que 7 archivos también pueden ser una accidental sin el informe de autoridad. Solo propone un tipo si hay ventaja clara; si no, no adivina.
+2. **Clasificación del modelo, leyendo los documentos.** Recibe la base de conocimiento y la pista preliminar. Regla de prioridad: **los documentos pesan más que el relato** (lo escribe una persona en duelo; un informe de autoridad o un dictamen son evidencia objetiva). Si contradice la pista, debe explicar por qué y queda el evento `clasificacion_difiere_de_preliminar`.
+
+Sobre el conjunto de prueba, la pista preliminar por sí sola acierta 31/34 sin equivocarse en ninguno (los 3 restantes quedan sin pista: relato vago o contradictorio), y el modelo acierta 34/34.
+
 ### Control de lo que el modelo se inventa
 - Salida restringida por **esquema JSON** (tipos y documentos son enumeraciones cerradas) y validada otra vez con Zod; cualquier respuesta fuera de esquema se descarta, no se "repara".
 - `temperature: 0`.
