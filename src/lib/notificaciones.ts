@@ -45,15 +45,21 @@ async function correosAnalistas(): Promise<string[]> {
   return (data ?? []).map((a) => a.email);
 }
 
-/** Envía las notificaciones pendientes. Llamada por el cron; segura de repetir. */
-export async function despacharPendientes(limite = 30): Promise<{ enviadas: number; fallidas: number; omitidas: number }> {
-  const { data } = await db()
+/**
+ * Envía las notificaciones pendientes. Se llama:
+ *  - al instante, para un caso, apenas el motor termina de revisarlo o un analista decide
+ *    (el beneficiario no espera a la siguiente ronda), y
+ *  - cada 15 minutos desde el cron, como respaldo (reintenta lo que haya fallado).
+ * Es segura de repetir: una notificación enviada no se vuelve a enviar.
+ */
+export async function despacharPendientes(limite = 30, reclamacionId?: string): Promise<{ enviadas: number; fallidas: number; omitidas: number }> {
+  let consulta = db()
     .from("notificaciones")
     .select("id, reclamacion_id, destinatario, canal, tipo, asunto, cuerpo, intentos")
     .in("estado", ["pendiente", "fallida"])
-    .lt("intentos", MAX_INTENTOS)
-    .order("created_at")
-    .limit(limite);
+    .lt("intentos", MAX_INTENTOS);
+  if (reclamacionId) consulta = consulta.eq("reclamacion_id", reclamacionId);
+  const { data } = await consulta.order("created_at").limit(limite);
 
   const resumen = { enviadas: 0, fallidas: 0, omitidas: 0 };
 

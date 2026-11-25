@@ -24,6 +24,23 @@ const VACIO: Datos = {
   beneficiario_telefono: "", asegurado_nombre: "", asegurado_documento: "", parentesco: "", relato: "",
 };
 
+// Errores frecuentes al escribir el dominio del correo (desde el celular es fácil equivocarse).
+// Si el correo queda mal, el beneficiario nunca recibe lo que le falta.
+const DOMINIOS: Record<string, string> = {
+  "gmail.con": "gmail.com", "gmail.co": "gmail.com", "gmail.cm": "gmail.com", "gmail.om": "gmail.com", "gmail.comm": "gmail.com",
+  "gmial.com": "gmail.com", "gmal.com": "gmail.com", "gamil.com": "gmail.com", "gmaill.com": "gmail.com", "gmai.com": "gmail.com",
+  "hotmail.con": "hotmail.com", "hotmail.co": "hotmail.com", "hotmial.com": "hotmail.com", "hotmal.com": "hotmail.com", "hormail.com": "hotmail.com",
+  "outlook.con": "outlook.com", "outlok.com": "outlook.com", "outloo.com": "outlook.com",
+  "yahoo.con": "yahoo.com", "yaho.com": "yahoo.com", "yahooo.com": "yahoo.com", "yahoo.es.co": "yahoo.es",
+};
+export function sugerirCorreo(email: string): string | null {
+  const [usuario, dominio] = email.trim().toLowerCase().split("@");
+  if (!usuario || !dominio) return null;
+  if (DOMINIOS[dominio]) return `${usuario}@${DOMINIOS[dominio]}`;
+  if (dominio.endsWith(".con")) return `${usuario}@${dominio.slice(0, -4)}.com`;
+  return null;
+}
+
 const dosPalabras = (v: string) => v.trim().split(/\s+/).filter(Boolean).length >= 2;
 const soloDigitos = (v: string) => /^\d{4,15}$/.test(v.replace(/[.\s-]/g, ""));
 
@@ -35,7 +52,11 @@ function validar(k: keyof Datos, d: Datos, soyAsegurado: boolean): string {
     case "beneficiario_documento":
       if (!v.trim()) return "Escriba su número de documento.";
       return ["PA", "PPT"].includes(d.beneficiario_tipo_doc) || soloDigitos(v) ? "" : "Revise el número: solo dígitos, sin puntos ni espacios.";
-    case "beneficiario_email": return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v.trim()) ? "" : "Escriba un correo válido, por ejemplo nombre@correo.com.";
+    case "beneficiario_email": {
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v.trim())) return "Escriba un correo válido, por ejemplo nombre@correo.com.";
+      const sugerido = sugerirCorreo(v);
+      return sugerido ? `Revise su correo: ¿quiso decir ${sugerido}?` : "";
+    }
     case "beneficiario_telefono": return !v || /^\d{10}$/.test(v.replace(/\s/g, "")) ? "" : "El celular debe tener 10 dígitos.";
     case "asegurado_nombre": return soyAsegurado || dosPalabras(v) ? "" : "Escriba el nombre completo de la persona asegurada.";
     case "asegurado_documento": return soyAsegurado || soloDigitos(v) ? "" : "Revise la cédula: solo dígitos, sin puntos.";
@@ -245,6 +266,12 @@ export default function FormularioRadicacion() {
               <label htmlFor="campo-beneficiario_email">Correo electrónico</label>
               <input {...inp("beneficiario_email")} type="email" autoComplete="email" />
               {err("beneficiario_email") ? <MsjError k="beneficiario_email" /> : <div className="msg">Allí le escribiremos qué falta y cómo va su caso.</div>}
+              {sugerirCorreo(d.beneficiario_email) && (
+                <button type="button" className="chip on" style={{ marginTop: 8 }}
+                  onClick={() => { const s = sugerirCorreo(d.beneficiario_email)!; setD((x) => ({ ...x, beneficiario_email: s })); setErrores((e) => ({ ...e, beneficiario_email: "" })); }}>
+                  Usar {sugerirCorreo(d.beneficiario_email)}
+                </button>
+              )}
             </div>
             <div className="field">
               <label htmlFor="campo-beneficiario_telefono">Celular<span className="opt">(opcional)</span></label>

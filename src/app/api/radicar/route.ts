@@ -1,7 +1,7 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { db } from "@/lib/supabase/admin";
 import { registrarEvento } from "@/lib/eventos";
-import { encolarNotificacion } from "@/lib/motor";
+import { despacharAhora, encolarNotificacion } from "@/lib/motor";
 import { crearCupos, DatosRadicacion, normalizarNumero } from "@/lib/radicacion";
 import { ipDe, nuevoToken, permitirEnvio } from "@/lib/seguridad";
 import { clasificarPreliminar } from "@/lib/ia/base-conocimiento";
@@ -105,6 +105,21 @@ async function radicar(req: Request) {
 
   const token = await nuevoEnlace(rec.id);
   const carga = await crearCupos(rec.id, d.archivos);
+
+  // Confirmación de recibido, al instante (lo que promete la pantalla de éxito). Lo que
+  // falta se le escribe en un segundo correo, apenas el motor termina de revisar.
+  const primerNombre = d.beneficiario_nombre.trim().split(/\s+/)[0];
+  await encolarNotificacion({
+    reclamacionId: rec.id, destinatario: "beneficiario", canal: "email", tipo: "acuse_recibo",
+    llave: `acuse_recibo:${rec.id}`,
+    asunto: `Recibimos su reclamación ${rec.radicado}`,
+    cuerpo:
+      `${primerNombre.charAt(0)}${primerNombre.slice(1).toLowerCase()}, recibimos su reclamación. Su número de radicado es ${rec.radicado}.\n\n` +
+      `Estamos revisando sus documentos. En unos minutos le escribiremos para contarle si su expediente quedó completo o qué le falta.\n\n` +
+      `Lamentamos lo que está viviendo y estaremos acompañándole durante el proceso.`,
+  });
+  after(() => despacharAhora(rec.id));
+
   return NextResponse.json({ radicado: rec.radicado, token, ...carga });
 }
 
@@ -145,5 +160,6 @@ async function responderExistente(caso: { id: string; radicado: string }, archiv
     cuerpo: `Ya existía una reclamación abierta (${caso.radicado}) para esta persona asegurada. No abrimos una nueva: los documentos que envió se agregaron a la existente y el plazo no se reinició.`,
   });
   const carga = await crearCupos(caso.id, archivos);
+  after(() => despacharAhora(caso.id));
   return NextResponse.json({ radicado: caso.radicado, existente: true, ...carga });
 }

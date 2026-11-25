@@ -7,6 +7,7 @@ import { crucesEntreDocumentos, validarDocumento, type DocParaCruce } from "@/li
 import { evaluarExpediente, resumenParaBeneficiario, type DocumentoEvaluable } from "@/lib/expediente";
 import type { Preliminar } from "@/lib/ia/base-conocimiento";
 import { SITUACIONES } from "@/lib/casillas";
+import { despacharPendientes } from "@/lib/notificaciones";
 import {
   NOMBRE_DOCUMENTO,
   NOMBRE_TIPO_RECLAMACION,
@@ -269,6 +270,8 @@ export async function procesarReclamacion(id: string, actor = "sistema"): Promis
     await db().from("reclamaciones").update({ intentos_ia: 0, ultimo_error_ia: null, alertas_cruce: alertasCruce }).eq("id", id);
     if (alertasCruce.length) await registrarEvento(id, "alertas_cruce_documentos", "sistema", { alertas: alertasCruce });
     await reevaluar(id, actor);
+    // El beneficiario recibe el correo apenas termina la revisión, sin esperar la ronda de 15 minutos
+    await despacharAhora(id);
   } finally {
     await soltarCandado(id);
   }
@@ -303,6 +306,7 @@ async function manejarFalloIA(rec: Reclamacion, mensaje: string) {
 
 Pasó a revisión manual: un analista debe revisar sus documentos o reintentar el análisis desde el panel.`,
     });
+    await despacharAhora(rec.id);
   }
 }
 
@@ -383,6 +387,18 @@ function hashCorto(s: string): string {
   let h = 0;
   for (let i = 0; i < s.length; i++) h = (Math.imul(31, h) + s.charCodeAt(i)) | 0;
   return (h >>> 0).toString(36);
+}
+
+/**
+ * Envía ya las notificaciones pendientes de un caso. Si falla (por ejemplo, el correo no
+ * responde), no pasa nada: quedan en cola y el cron las reintenta en su ronda de 15 minutos.
+ */
+export async function despacharAhora(reclamacionId: string) {
+  try {
+    await despacharPendientes(10, reclamacionId);
+  } catch (e) {
+    console.error("[notificaciones] envío inmediato falló; queda para la ronda del cron", e);
+  }
 }
 
 export async function encolarNotificacion(n: {

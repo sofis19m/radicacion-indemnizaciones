@@ -6,7 +6,7 @@ import { z } from "zod";
 import { db } from "@/lib/supabase/admin";
 import { clienteSesion, exigirAnalista } from "@/lib/supabase/sesion";
 import { registrarEvento } from "@/lib/eventos";
-import { encolarNotificacion, procesarReclamacion, reevaluar } from "@/lib/motor";
+import { despacharAhora, encolarNotificacion, procesarReclamacion, reevaluar } from "@/lib/motor";
 import { NOMBRE_DOCUMENTO, TIPOS_DOCUMENTO, TIPOS_RECLAMACION } from "@/lib/dominio";
 
 export type ResultadoAccion = { ok: boolean; mensaje: string };
@@ -37,6 +37,7 @@ export async function confirmarTipo(_: ResultadoAccion | null, fd: FormData): Pr
     sugerido_por_modelo: r.tipo_sugerido, anterior: r.tipo_final, final: datos.data.tipo,
   });
   await reevaluar(datos.data.id, `analista:${analista.email}`);
+  await despacharAhora(datos.data.id);
   revalidatePath(`/panel/casos/${datos.data.id}`);
   return { ok: true, mensaje: corrigio ? "Tipo corregido. El expediente se recalculó." : "Tipo confirmado." };
 }
@@ -67,6 +68,7 @@ export async function corregirDocumento(_: ResultadoAccion | null, fd: FormData)
     documento_id: d.id, antes, despues: { tipo: d.tipo, estado: d.estado, motivo: d.motivo },
   });
   await reevaluar(d.reclamacion_id, `analista:${analista.email}`);
+  await despacharAhora(d.reclamacion_id);
   revalidatePath(`/panel/casos/${d.reclamacion_id}`);
   return { ok: true, mensaje: "Documento actualizado y expediente recalculado." };
 }
@@ -132,6 +134,7 @@ export async function registrarDecision(_: ResultadoAccion | null, fd: FormData)
     reclamacionId: d.id, destinatario: "beneficiario", canal: "email", tipo: `decision_${d.decision}`,
     llave: `decision:${d.id}:${Date.now()}`, ...mensaje,
   });
+  await despacharAhora(d.id);
 
   revalidatePath(`/panel/casos/${d.id}`);
   revalidatePath("/panel");
