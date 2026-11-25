@@ -66,9 +66,19 @@ async function radicar(e: Escenario, archivos: Archivo[], llave: string) {
     situacion_declarada: e.situacionDeclarada ?? { muerte_natural: "fallecimiento", muerte_accidental: "accidente", incapacidad_total_permanente: "incapacidad" }[e.esperado.tipo],
     archivos: archivos.map((a) => ({ nombre: a.nombre, mime: a.mime, bytes: a.bytes.length, tipo_declarado: a.casilla })),
   };
-  const r = await fetch(`${APP}/api/radicar`, { method: "POST", headers: { "Content-Type": "application/json", "X-Forwarded-For": `10.0.${Math.floor(Math.random() * 250)}.${Math.floor(Math.random() * 250)}` }, body: JSON.stringify(cuerpo) });
-  const json = await r.json();
-  if (!r.ok) throw new Error(`${e.id}: ${JSON.stringify(json)}`);
+  // Como haría el navegador ante una falla pasajera: reintenta con la MISMA llave de
+  // idempotencia, así el reintento nunca crea un segundo expediente.
+  let r: Response | null = null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let json: any = {};
+  for (let intento = 1; intento <= 3; intento++) {
+    r = await fetch(`${APP}/api/radicar`, { method: "POST", headers: { "Content-Type": "application/json", "X-Forwarded-For": `10.0.${Math.floor(Math.random() * 250)}.${Math.floor(Math.random() * 250)}` }, body: JSON.stringify(cuerpo) });
+    json = await r.json().catch(() => ({ error: `respuesta no JSON (${r!.status})` }));
+    if (r.ok || r.status < 500) break;
+    console.warn(`   ! intento ${intento} falló (${r.status}); reintentando con la misma llave`);
+    await dormir(3000 * intento);
+  }
+  if (!r!.ok) throw new Error(`${e.id}: ${JSON.stringify(json)}`);
   const confirmacion = await subir(json, archivos);
   return { ...json, confirmacion };
 }

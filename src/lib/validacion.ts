@@ -74,9 +74,15 @@ export function validarDocumento(x: DocumentoExtraido, caso: DatosCaso, hoy = ne
   if (problemas.has("cuenta_inactiva")) return r("incompleto", "La cuenta figura inactiva o cancelada. Envíe la certificación de una cuenta activa.");
 
   // Regla 5 · Contenido incompleto según la ficha ("Debe contener")
+  // En documentos de identidad, "ambas caras" NO se evalúa archivo por archivo: el frente
+  // y el reverso pueden llegar en dos fotos. Esa regla se aplica al juntar los archivos
+  // del expediente (expediente.ts), no aquí.
+  const faltantes = ficha.requiereAmbasCaras
+    ? x.elementos_faltantes.filter((e) => !/caras?|frente|reverso/i.test(e))
+    : x.elementos_faltantes;
   if (problemas.has("paginas_faltantes")) return r("incompleto", "Faltan páginas del documento.");
-  if (problemas.has("campos_vacios") || x.elementos_faltantes.length) {
-    const faltan = x.elementos_faltantes.length ? ` Falta: ${x.elementos_faltantes.slice(0, 3).join("; ").toLowerCase()}.` : "";
+  if (problemas.has("campos_vacios") || faltantes.length) {
+    const faltan = faltantes.length ? ` Falta: ${faltantes.slice(0, 3).join("; ").toLowerCase()}.` : "";
     return r("incompleto", `Tiene información incompleta.${faltan}`);
   }
 

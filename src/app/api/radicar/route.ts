@@ -13,6 +13,20 @@ export const runtime = "nodejs";
  * los archivos directo al almacenamiento. Paso 2: /api/cargas/confirmar.
  */
 export async function POST(req: Request) {
+  try {
+    return await radicar(req);
+  } catch (e) {
+    // Falla pasajera (red, almacenamiento, base): se responde con un mensaje claro.
+    // Reintentar es seguro: la llave de idempotencia evita un segundo expediente.
+    console.error("[radicar] error inesperado", e);
+    return NextResponse.json(
+      { error: "Tuvimos un problema momentáneo al registrar su reclamación. Intente de nuevo: si ya había llegado, no se duplicará." },
+      { status: 503 },
+    );
+  }
+}
+
+async function radicar(req: Request) {
   if (!(await permitirEnvio(ipDe(req)))) {
     return NextResponse.json({ error: "Ha enviado muchas solicitudes. Intente de nuevo en una hora." }, { status: 429 });
   }

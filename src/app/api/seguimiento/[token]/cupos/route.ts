@@ -24,5 +24,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ token: 
   const { data: rec } = await db().from("reclamaciones").select("estado").eq("id", reclamacionId).single();
   if (rec?.estado === "cerrado") return NextResponse.json({ error: "Esta reclamación ya fue cerrada." }, { status: 409 });
 
-  return NextResponse.json(await crearCupos(reclamacionId, datos.data.archivos));
+  try {
+    return NextResponse.json(await crearCupos(reclamacionId, datos.data.archivos));
+  } catch (e) {
+    console.error("[cupos] error inesperado", e);
+    return NextResponse.json({ error: "Tuvimos un problema momentáneo. Intente de nuevo en unos segundos." }, { status: 503 });
+  }
 }
