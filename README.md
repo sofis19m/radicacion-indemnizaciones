@@ -80,7 +80,7 @@ La lógica vive en una **base de conocimiento** editable (`src/lib/ia/base-conoc
 
 ### Ficha técnica de documentos
 `src/lib/ia/fichas-documentos.ts` define, para cada documento, **cómo se reconoce, qué debe contener y qué alertas revisar**, y un **catálogo cerrado de problemas** (borroso, cortado, mal escaneado, una sola cara, sin firma, sin huella, sin sello, campos vacíos, vencido, enmendaduras, posible alteración...). Las alertas tienen dos niveles:
-- **Del documento** (se corrige reenviándolo): el documento no cuenta y se le explica a la persona qué corregir.
+- **Del documento** (se corrige reenviándolo): el documento no cuenta y a la persona solo se le pide que lo envíe nuevamente, con una indicación práctica cuando ayuda (firma y huella, foto más clara, fecha reciente). El motivo detallado lo ve solo el analista en el panel.
 - **Para el analista** (asuntos de fondo: porcentaje de pérdida de capacidad bajo, dictamen sin ejecutoria, enmendaduras, fechas que no coinciden entre documentos, firmante distinto al beneficiario): el documento cuenta, pero el caso queda marcado. Decidir sobre ellas es pagar u objetar, y eso es humano.
 
 Además, el código **cruza documentos entre sí** (fecha de muerte en registro civil, certificado e informe; nombre del fallecido frente al asegurado) y genera alertas si no coinciden. El sistema **no certifica autenticidad**: señala inconsistencias para revisión humana.

@@ -67,6 +67,8 @@ Así, si la IA se equivoca, una regla fija la frena, y la decisión de fondo sie
 
 Si pasa las seis preguntas → ✅ **válido**.
 
+**Qué ve cada quien:** la tabla de arriba es lo que el sistema determina **por dentro**, y eso lo ve solo el analista en el panel. Al beneficiario no se le muestran detalles técnicos ni lo que se encontró en el documento: solo se le dice *"Recibimos este documento, pero necesitamos que nos lo envíe nuevamente"*. Cuando ayuda a no repetir el error, se agrega una indicación sencilla: *"con su firma y huella"*, *"con una foto más clara"* o *"necesitamos uno con fecha más reciente"*.
+
 **Alertas de fondo:** algunas cosas no se rechazan, sino que se le avisan al analista, porque decidir sobre ellas es decidir el pago. Por ejemplo: un dictamen con menos del 50 % de pérdida de capacidad, enmendaduras, posibles alteraciones, o fechas de muerte distintas entre el registro civil y el certificado médico.
 
 **¿Detecta documentos falsos?** No: ninguna IA puede certificar que un documento es auténtico. Lo que hace es señalar inconsistencias para que una persona las revise. En producción, la verificación real se haría contra fuentes oficiales (Registraduría, ReTHUS, Fiscalía).
@@ -92,10 +94,10 @@ Cada documento queda en una de tres situaciones:
 | | Situación | Qué se le dice |
 |---|---|---|
 | ✅ | Llegó y sirve | — |
-| ⚠️ | Llegó, pero tiene un error | *"Corríjalo y reenvíelo"* |
+| ⚠️ | Llegó, pero no se pudo aceptar | *"Lo recibimos, pero necesitamos que nos lo envíe nuevamente"* |
 | ⬜ | No llegó | *"Aún no lo recibimos"* |
 
-**Ejemplo:** llegaron los 7 documentos, pero el SARLAFT sin firma. El expediente está **incompleto**, porque un documento con error no cuenta. Al beneficiario se le dice que **corrija** el SARLAFT, no que le **falta**.
+**Ejemplo:** llegaron los 7 documentos, pero el SARLAFT sin firma. El expediente está **incompleto**, porque un documento con error no cuenta. Al beneficiario se le pide que **envíe nuevamente** el SARLAFT, con su firma y huella; no se le dice que le **falta**.
 
 **La cédula en dos fotos:** si llega el frente en una foto y el reverso en otra, el sistema las junta y cuentan como un solo documento.
 
