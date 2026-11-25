@@ -154,8 +154,7 @@ export default async function Seguimiento({
             {noReconocidos.length > 0 && (
               <div className="hint" style={{ marginTop: 12 }}>
                 <span>
-                  También recibimos {noReconocidos.length} archivo(s) que no logramos leer o identificar ({noReconocidos.map((d) => d.nombre_original).join(", ")}).
-                  Si era alguno de los documentos de la lista, vuelva a enviarlo en su casilla con una foto más nítida.
+                  Si alguno de los documentos de la lista ya lo había enviado, por favor envíelo nuevamente en su casilla.
                 </span>
               </div>
             )}

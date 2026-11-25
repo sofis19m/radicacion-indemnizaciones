@@ -89,14 +89,21 @@ export const AYUDA_DOCUMENTO: Record<TipoDocumento, string> = {
 };
 
 /** Mensaje al beneficiario cuando el documento llegó pero no sirve. Distinto de "falta". */
+/**
+ * Lo que ve el BENEFICIARIO cuando un documento llegó pero no se pudo aceptar.
+ * Nunca se le cuenta lo que el sistema detectó por dentro (que no coincide la cédula,
+ * que parece otro documento, posibles alteraciones, campos faltantes): ese detalle es
+ * solo para el analista, en el panel. A la persona solo se le pide que lo envíe de
+ * nuevo y, cuando ayuda a no repetir el error, una indicación práctica.
+ */
 export const MOTIVO_ESTADO: Record<Exclude<EstadoDocumento, "valido" | "pendiente_revision">, string> = {
-  sin_firma: "Llegó, pero le falta la firma o la huella. Por favor complételo y vuelva a enviarlo.",
-  ilegible: "Llegó, pero no se puede leer bien. Envíe una foto más nítida o un escaneo.",
-  no_corresponde: "Llegó, pero los datos no coinciden con los de la reclamación. Revise que sea el documento de la persona correcta.",
-  vencido_o_incompleto: "Llegó, pero está incompleto o desactualizado.",
-  incompleto: "Llegó, pero le falta información.",
-  vencido: "Llegó, pero ya no está vigente.",
-  no_reconocido: "Recibimos este archivo, pero no pudimos identificar qué documento es.",
+  sin_firma: "Recibimos este documento, pero necesitamos que nos lo envíe nuevamente, con su firma y huella.",
+  ilegible: "Recibimos este documento, pero necesitamos que nos lo envíe nuevamente, con una foto o escaneo más claro.",
+  vencido: "Recibimos este documento, pero necesitamos uno con fecha más reciente.",
+  no_corresponde: "Recibimos este documento, pero necesitamos que nos lo envíe nuevamente.",
+  vencido_o_incompleto: "Recibimos este documento, pero necesitamos que nos lo envíe nuevamente.",
+  incompleto: "Recibimos este documento, pero necesitamos que nos lo envíe nuevamente.",
+  no_reconocido: "Recibimos este documento, pero necesitamos que nos lo envíe nuevamente.",
 };
 
 export const DOCUMENTOS_CON_FIRMA: TipoDocumento[] = ["formulario_sarlaft", "formato_reclamacion"];

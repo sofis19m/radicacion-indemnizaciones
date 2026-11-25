@@ -70,17 +70,18 @@ export function evaluarExpediente(tipo: TipoReclamacion, documentos: DocumentoEv
     } else if (faltaCara) {
       checklist.push({
         tipo: req, nombre: NOMBRE_DOCUMENTO[req], situacion: "recibido_no_sirve",
-        detalle: `Recibimos solo una cara. Falta ${faltaCara} del documento.`, documentoId: validos[0]?.id,
+        detalle: `Recibimos este documento, pero necesitamos que nos envíe también ${faltaCara}.`, documentoId: validos[0]?.id,
       });
     } else if (enRevision) {
       checklist.push({ tipo: req, nombre: NOMBRE_DOCUMENTO[req], situacion: "en_revision", detalle: "Lo estamos revisando.", documentoId: enRevision.id });
     } else if (noSirve) {
-      const motivoBase = MOTIVO_ESTADO[noSirve.estado as keyof typeof MOTIVO_ESTADO] ?? "Llegó, pero no se pudo aceptar.";
+      // Al beneficiario solo se le pide reenviarlo. El motivo interno (noSirve.motivo)
+      // no se incluye aquí: lo ve el analista en el panel.
       checklist.push({
         tipo: req,
         nombre: NOMBRE_DOCUMENTO[req],
         situacion: "recibido_no_sirve",
-        detalle: noSirve.motivo ? `${motivoBase} ${noSirve.motivo}` : motivoBase,
+        detalle: MOTIVO_ESTADO[noSirve.estado as keyof typeof MOTIVO_ESTADO] ?? "Recibimos este documento, pero necesitamos que nos lo envíe nuevamente.",
         documentoId: noSirve.id,
       });
     } else {
