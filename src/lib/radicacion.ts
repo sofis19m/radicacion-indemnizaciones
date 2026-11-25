@@ -5,18 +5,21 @@ import { z } from "zod";
 import { db } from "@/lib/supabase/admin";
 import { registrarEvento } from "@/lib/eventos";
 import { LIMITES, nombreSeguro, nuevoToken, sha256 } from "@/lib/seguridad";
+import { TIPOS_DOCUMENTO } from "@/lib/dominio";
 
 const documentoId = z.string().trim().regex(/^[0-9A-Za-z.\- ]{4,20}$/, "Número de documento no válido");
 
 export const MetaArchivo = z.object({
   nombre: z.string().min(1).max(200),
+  /** Casilla donde el beneficiario subió el archivo (null = "otros documentos"). */
+  tipo_declarado: z.enum(TIPOS_DOCUMENTO).nullable().optional(),
   mime: z.enum(["application/pdf", "image/jpeg", "image/png", "image/webp"], { message: "Solo PDF o imágenes JPG/PNG/WEBP" }),
   bytes: z.number().int().positive().max(LIMITES.bytesPorArchivo, "Cada archivo debe pesar máximo 10 MB"),
 });
 
 export const DatosRadicacion = z.object({
   beneficiario_nombre: z.string().trim().min(3, "Escriba su nombre completo").max(120),
-  beneficiario_tipo_doc: z.enum(["CC", "CE", "PA", "TI"]),
+  beneficiario_tipo_doc: z.enum(["CC", "TI", "RC", "CE", "PA", "PPT"]),
   beneficiario_documento: documentoId,
   beneficiario_email: z.string().trim().toLowerCase().email("Correo no válido").max(160),
   beneficiario_telefono: z.string().trim().regex(/^[0-9+ ()-]{7,20}$/, "Teléfono no válido").optional().or(z.literal("")),
@@ -50,7 +53,7 @@ export async function crearCupos(reclamacionId: string, archivos: z.infer<typeof
     if (error || !data) throw new Error(`No se pudo preparar la carga: ${error?.message}`);
     const { data: carga, error: e2 } = await db()
       .from("cargas")
-      .insert({ reclamacion_id: reclamacionId, lote, secreto_hash: hash, storage_path: path, nombre_original: nombreSeguro(a.nombre) })
+      .insert({ reclamacion_id: reclamacionId, lote, secreto_hash: hash, storage_path: path, nombre_original: nombreSeguro(a.nombre), tipo_declarado: a.tipo_declarado === "otro" ? null : a.tipo_declarado ?? null })
       .select("id")
       .single();
     if (e2) throw new Error(e2.message);
@@ -106,7 +109,7 @@ export async function confirmarLote(lote: string, secreto: string, actor: string
 
     const { data: doc, error: errDoc } = await db()
       .from("documentos")
-      .insert({ reclamacion_id: reclamacionId, sha256: hash, storage_path: destino, nombre_original: c.nombre_original, mime: tipo.mime, bytes: buffer.length })
+      .insert({ reclamacion_id: reclamacionId, sha256: hash, storage_path: destino, nombre_original: c.nombre_original, mime: tipo.mime, bytes: buffer.length, tipo_declarado: c.tipo_declarado })
       .select("id")
       .single();
     if (errDoc) {
@@ -119,7 +122,7 @@ export async function confirmarLote(lote: string, secreto: string, actor: string
       throw new Error(errDoc.message);
     }
     await db().from("cargas").update({ estado: "aceptada", documento_id: doc.id }).eq("id", c.id);
-    await registrarEvento(reclamacionId, "documento_recibido", actor, { documento_id: doc.id, sha256: hash, nombre: c.nombre_original, mime: tipo.mime, bytes: buffer.length });
+    await registrarEvento(reclamacionId, "documento_recibido", actor, { documento_id: doc.id, casilla: c.tipo_declarado, sha256: hash, nombre: c.nombre_original, mime: tipo.mime, bytes: buffer.length });
     resultado.aceptados++;
   }
 

@@ -15,8 +15,14 @@ function storage() {
   return cliente.storage.from("documentos");
 }
 
-export function metaDe(files: File[]) {
-  return files.map((f) => ({ nombre: f.name, mime: f.type, bytes: f.size }));
+/** Metadatos que se anuncian al servidor: nombre, tipo, tamaño y casilla de cada archivo. */
+export function metaDe(items: { file: File; casilla: string }[]) {
+  return items.map(({ file, casilla }) => ({
+    nombre: file.name,
+    mime: file.type,
+    bytes: file.size,
+    tipo_declarado: casilla === "otros" ? null : casilla,
+  }));
 }
 
 /** Sube cada archivo a su URL firmada y luego pide al servidor confirmarlos. */

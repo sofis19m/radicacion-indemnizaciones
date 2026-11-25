@@ -41,7 +41,7 @@ export default async function Seguimiento({
 
   const { data: docs } = await db()
     .from("documentos")
-    .select("id, nombre_original, tipo_detectado, estado, motivo, created_at")
+    .select("id, nombre_original, tipo_detectado, estado, motivo, created_at, cara")
     .eq("reclamacion_id", id)
     .order("created_at");
   const documentos = (docs ?? []) as DocumentoEvaluable[];
@@ -58,7 +58,14 @@ export default async function Seguimiento({
   const enProceso = r.estado === "recibido" || documentos.some((d) => d.estado === "pendiente_revision");
   const evaluacion = tipo ? evaluarExpediente(tipo, documentos) : null;
   const pendientes = evaluacion?.checklist.filter((i) => i.situacion === "recibido_no_sirve" || i.situacion === "falta") ?? [];
-  const noReconocidos = documentos.filter((d) => d.estado === "no_reconocido");
+  const noReconocidos = documentos.filter((d) => !d.tipo_detectado && (d.estado === "no_reconocido" || d.estado === "ilegible"));
+  // Casillas a mostrar primero al subir más documentos: lo que falta, lo que hay que corregir
+  // y lo que el analista pidió adicionalmente.
+  const solicitados: string[] = decision?.decision === "pedir_documentos" ? decision.documentos_solicitados ?? [] : [];
+  const casillasPendientes = [...new Set([...pendientes.map((i) => i.tipo as string), ...solicitados])];
+  const estadosCasilla = Object.fromEntries(
+    pendientes.filter((i) => i.situacion === "recibido_no_sirve").map((i) => [i.tipo, i.detalle]),
+  );
 
   return (
     <main className="mx-auto max-w-2xl px-4 py-8">
@@ -139,8 +146,8 @@ export default async function Seguimiento({
           </ul>
           {noReconocidos.length > 0 && (
             <p className="mt-3 text-sm text-gray-600">
-              También recibimos {noReconocidos.length} archivo(s) que no logramos identificar ({noReconocidos.map((d) => d.nombre_original).join(", ")}).
-              Un analista los revisará.
+              También recibimos {noReconocidos.length} archivo(s) que no logramos leer o identificar ({noReconocidos.map((d) => d.nombre_original).join(", ")}).
+              Si era alguno de los documentos de la lista, vuelva a enviarlo en su casilla con una foto más nítida.
             </p>
           )}
         </section>
@@ -149,7 +156,7 @@ export default async function Seguimiento({
       {r.estado !== "cerrado" && (
         <section className="mt-6">
           <h2 className="mb-3 text-lg font-semibold">Enviar más documentos</h2>
-          <SubirMas token={token} />
+          <SubirMas token={token} pendientes={casillasPendientes} estados={estadosCasilla} />
         </section>
       )}
 

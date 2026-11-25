@@ -117,7 +117,7 @@ export type Preliminar = {
  * pista débil, por la cantidad de archivos. No decide nada: orienta al modelo y
  * queda registrada para comparar con la clasificación final.
  */
-export function clasificarPreliminar(relato: string, archivos: { nombre: string }[]): Preliminar {
+export function clasificarPreliminar(relato: string, archivos: { nombre: string; tipo_declarado?: TipoDocumento | null }[]): Preliminar {
   const texto = normalizar(relato);
   const puntajes: Record<TipoReclamacion, number> = { muerte_natural: 0, muerte_accidental: 0, incapacidad_total_permanente: 0 };
   const frasesEncontradas: Preliminar["frasesEncontradas"] = [];
@@ -133,9 +133,14 @@ export function clasificarPreliminar(relato: string, archivos: { nombre: string 
     }
   }
 
-  // Nombres de archivo: pista media (el beneficiario los nombra como quiere)
+  // Casillas usadas (pista media-fuerte: la persona eligió dónde subirlo) y, si no
+  // hay casilla, el nombre del archivo (pista media: lo nombra como quiere).
   const tiposPorNombre = new Set<TipoDocumento>();
   for (const a of archivos) {
+    if (a.tipo_declarado && a.tipo_declarado !== "otro") {
+      tiposPorNombre.add(a.tipo_declarado);
+      continue;
+    }
     const n = normalizar(a.nombre);
     for (const p of PISTAS_NOMBRE) if (p.patron.test(n)) tiposPorNombre.add(p.tipo);
   }
@@ -143,7 +148,7 @@ export function clasificarPreliminar(relato: string, archivos: { nombre: string 
     for (const d of s.documentosQueLoIndican) {
       if (tiposPorNombre.has(d.tipo)) {
         puntajes[tipo] += Math.ceil(d.peso / 2);
-        pistasArchivos.push(`archivo con nombre de ${d.tipo.replaceAll("_", " ")}`);
+        pistasArchivos.push(`subió ${d.tipo.replaceAll("_", " ")}`);
       }
     }
   }
@@ -153,7 +158,8 @@ export function clasificarPreliminar(relato: string, archivos: { nombre: string 
   }
 
   // Cantidad de archivos: pista DÉBIL (el 62 % de los expedientes llega incompleto)
-  const n = archivos.length;
+  const casillas = new Set(archivos.map((a) => a.tipo_declarado).filter(Boolean));
+  const n = casillas.size || archivos.length;
   if (n >= 8) {
     puntajes.muerte_accidental += 1;
     pistasArchivos.push(`${n} archivos (coincide con los 8 de muerte accidental)`);

@@ -11,9 +11,14 @@ export const env = {
   get supabaseAnonKey() { return requerida("NEXT_PUBLIC_SUPABASE_ANON_KEY"); },
   get supabaseServiceKey() { return requerida("SUPABASE_SERVICE_ROLE_KEY"); },
   get geminiApiKey() { return requerida("GEMINI_API_KEY"); },
-  get geminiModel() { return process.env.GEMINI_MODEL || "gemini-3.5-flash"; },
-  /** Modelo de respaldo si el principal no responde, está saturado o fue retirado. */
-  get geminiModelRespaldo() { return process.env.GEMINI_MODEL_RESPALDO || "gemini-3.5-flash-lite"; },
+  /**
+   * Cadena de modelos, del más capaz al de último recurso. Si uno no responde, está
+   * saturado, agotó su cuota diaria o fue retirado, se intenta con el siguiente.
+   */
+  get geminiModelos(): string[] {
+    const lista = process.env.GEMINI_MODELOS || "gemini-3.6-flash,gemini-3-flash-preview,gemini-3.5-flash,gemini-3.5-flash-lite";
+    return lista.split(",").map((m) => m.trim()).filter(Boolean);
+  },
   get appUrl() { return (process.env.APP_URL || "http://localhost:3000").replace(/\/$/, ""); },
   get cronSecret() { return requerida("CRON_SECRET"); },
   get hashSalt() { return requerida("HASH_SALT"); },

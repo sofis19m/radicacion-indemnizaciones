@@ -48,7 +48,7 @@ export async function corregirDocumento(_: ResultadoAccion | null, fd: FormData)
     id: z.string().uuid(),
     reclamacion_id: z.string().uuid(),
     tipo: z.enum(TIPOS_DOCUMENTO),
-    estado: z.enum(["valido", "sin_firma", "ilegible", "no_corresponde", "vencido_o_incompleto", "no_reconocido"]),
+    estado: z.enum(["valido", "sin_firma", "ilegible", "no_corresponde", "incompleto", "vencido", "no_reconocido"]),
     motivo: z.string().max(300).optional(),
   }).safeParse(Object.fromEntries(fd));
   if (!datos.success) return { ok: false, mensaje: "Datos no válidos" };

@@ -19,7 +19,7 @@ const admin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SU
 const SALIDA = "datos-prueba/generados";
 const PAUSA_MS = Number(process.env.PAUSA_MS ?? 7000); // respeta el límite gratuito del modelo
 
-type Archivo = { nombre: string; mime: string; bytes: Uint8Array };
+type Archivo = { nombre: string; mime: string; bytes: Uint8Array; casilla: string | null };
 const dormir = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 async function archivosDe(e: Escenario, docs: DocEscenario[], sufijo = ""): Promise<Archivo[]> {
@@ -30,12 +30,14 @@ async function archivosDe(e: Escenario, docs: DocEscenario[], sufijo = ""): Prom
     // Lo "ilegible" se envía como foto borrosa (PNG), igual que llega desde un celular.
     const foto = d.variante === "ilegible";
     const bytes = foto ? generarFotoIlegible(Number(e.id.slice(1)) * 10 + i) : await generarDocumento(d.tipo, ctx, d.variante ?? "ok");
-    const nombre = `${foto ? "foto_" : ""}${d.tipo}${sufijo}.${foto ? "png" : "pdf"}`;
-    writeFileSync(`${SALIDA}/${e.id}/${nombre}`, bytes);
-    lista.push({ nombre, mime: foto ? "image/png" : "application/pdf", bytes });
+    // Nombre genérico, como el de una foto o un escaneo real: el nombre no le "sopla" el tipo al modelo
+    const nombre = `${foto ? "IMG" : "documento"}_${i + 1}${sufijo}.${foto ? "png" : "pdf"}`;
+    writeFileSync(`${SALIDA}/${e.id}/${d.tipo}${d.variante && d.variante !== "ok" ? "_" + d.variante : ""}${sufijo}.${foto ? "png" : "pdf"}`, bytes);
+    const casilla = d.casilla ?? (d.tipo === "factura_servicios" ? "otros" : d.tipo);
+    lista.push({ nombre, mime: foto ? "image/png" : "application/pdf", bytes, casilla: casilla === "otros" ? null : casilla });
   }
   if (e.especial === "falso_pdf" && !sufijo) {
-    lista.push({ nombre: "certificacion_bancaria.pdf", mime: "application/pdf", bytes: new TextEncoder().encode("MZ esto no es un PDF, es un ejecutable disfrazado") });
+    lista.push({ nombre: "certificacion_bancaria.pdf", mime: "application/pdf", bytes: new TextEncoder().encode("MZ esto no es un PDF, es un ejecutable disfrazado"), casilla: "certificacion_bancaria" });
   }
   if (e.especial === "repetido_en_envio" && !sufijo) lista.push({ ...lista[3], nombre: `copia_${lista[3].nombre}` });
   return lista;
@@ -60,7 +62,7 @@ async function radicar(e: Escenario, archivos: Archivo[], llave: string) {
     beneficiario_email: e.beneficiario.email, beneficiario_telefono: "3001234567", parentesco: e.beneficiario.parentesco,
     asegurado_nombre: e.asegurado.nombre, asegurado_documento: e.asegurado.cedula, relato: e.relato,
     consentimiento: true, idempotency_key: llave,
-    archivos: archivos.map((a) => ({ nombre: a.nombre, mime: a.mime, bytes: a.bytes.length })),
+    archivos: archivos.map((a) => ({ nombre: a.nombre, mime: a.mime, bytes: a.bytes.length, tipo_declarado: a.casilla })),
   };
   const r = await fetch(`${APP}/api/radicar`, { method: "POST", headers: { "Content-Type": "application/json", "X-Forwarded-For": `10.0.${Math.floor(Math.random() * 250)}.${Math.floor(Math.random() * 250)}` }, body: JSON.stringify(cuerpo) });
   const json = await r.json();
@@ -122,7 +124,7 @@ async function main() {
       const tardios = await archivosDe(e, e.luego, "_tardio");
       const cupos = await fetch(`${APP}/api/seguimiento/${r1.token}/cupos`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ archivos: tardios.map((a) => ({ nombre: a.nombre, mime: a.mime, bytes: a.bytes.length })) }),
+        body: JSON.stringify({ archivos: tardios.map((a) => ({ nombre: a.nombre, mime: a.mime, bytes: a.bytes.length, tipo_declarado: a.casilla })) }),
       }).then((x) => x.json());
       const c = await subir(cupos, tardios);
       console.log(`   documentos tardíos desde el enlace de seguimiento · aceptados ${c.aceptados}`);

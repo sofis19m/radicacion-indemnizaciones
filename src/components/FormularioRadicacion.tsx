@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import SelectorArchivos, { validarEnCliente } from "./SelectorArchivos";
+import SubirPorCasillas, { aplanar, MAX_ARCHIVOS, totalArchivos, validarEnCliente, type ArchivosPorCasilla } from "./SubirPorCasillas";
 import { metaDe, subirYConfirmar } from "@/lib/subirArchivos";
 
 type Errores = Record<string, string[] | undefined>;
@@ -11,7 +11,7 @@ const LLAVE_SESION = "radicacion_idempotency_key";
 
 export default function FormularioRadicacion() {
   const router = useRouter();
-  const [archivos, setArchivos] = useState<File[]>([]);
+  const [archivos, setArchivos] = useState<ArchivosPorCasilla>({});
   const [enviando, setEnviando] = useState(false);
   const [errorGeneral, setErrorGeneral] = useState<string | null>(null);
   const [errores, setErrores] = useState<Errores>({});
@@ -39,8 +39,10 @@ export default function FormularioRadicacion() {
     setErrorGeneral(null);
     setErrores({});
 
-    const locales = validarEnCliente(archivos);
-    if (archivos.length === 0) locales.push("Adjunte al menos un documento.");
+    const lista = aplanar(archivos);
+    const locales = validarEnCliente(lista.map((x) => x.file));
+    if (lista.length === 0) locales.push("Adjunte al menos un documento.");
+    if (lista.length > MAX_ARCHIVOS) locales.push(`Puede adjuntar máximo ${MAX_ARCHIVOS} archivos por envío. Si tiene más, envíe el resto después desde su enlace de seguimiento.`);
     setErroresArchivos(locales);
     if (locales.length) return;
 
@@ -53,7 +55,7 @@ export default function FormularioRadicacion() {
     }
     datos.consentimiento = fd.get("consentimiento") === "si";
     datos.idempotency_key = llave;
-    datos.archivos = metaDe(archivos);
+    datos.archivos = metaDe(lista);
 
     setEnviando(true);
     try {
@@ -65,7 +67,7 @@ export default function FormularioRadicacion() {
         setErrores(json.campos ?? {});
         return;
       }
-      const r = await subirYConfirmar(archivos, json, (h, t) => setProgreso(`Subiendo documentos (${h} de ${t})…`));
+      const r = await subirYConfirmar(lista.map((x) => x.file), json, (h, t) => setProgreso(`Subiendo documentos (${h} de ${t})…`));
       try { sessionStorage.removeItem(LLAVE_SESION); } catch {}
       if (json.token) {
         const extra = r.rechazados.length ? `&rechazados=${encodeURIComponent(r.rechazados.join(" | "))}` : "";
@@ -115,10 +117,12 @@ export default function FormularioRadicacion() {
           <div>
             <label className="etiqueta" htmlFor="beneficiario_tipo_doc">Tipo</label>
             <select id="beneficiario_tipo_doc" name="beneficiario_tipo_doc" className="campo" defaultValue="CC">
-              <option value="CC">C.C.</option>
-              <option value="CE">C.E.</option>
+              <option value="CC">Cédula</option>
+              <option value="TI">Tarjeta de identidad</option>
+              <option value="RC">Registro civil</option>
+              <option value="CE">Cédula de extranjería</option>
               <option value="PA">Pasaporte</option>
-              <option value="TI">T.I.</option>
+              <option value="PPT">PPT</option>
             </select>
           </div>
           <div className="col-span-2">
@@ -179,8 +183,12 @@ export default function FormularioRadicacion() {
 
       <fieldset className="tarjeta space-y-3">
         <legend className="px-1 text-lg font-semibold text-gray-900">4. Documentos</legend>
-        <p className="text-sm text-gray-600">Suba los que tenga. Si falta alguno, se lo diremos y podrá enviarlo después.</p>
-        <SelectorArchivos archivos={archivos} onChange={setArchivos} />
+        <p className="text-sm text-gray-600">
+          Suba cada documento en su casilla. Solo los que tenga: si falta alguno, se lo diremos y podrá enviarlo después.
+          Puede tomar las fotos con el celular.
+        </p>
+        <SubirPorCasillas valor={archivos} onChange={setArchivos} />
+        <p className="text-right text-xs text-gray-500">{totalArchivos(archivos)} de {MAX_ARCHIVOS} archivos</p>
         {erroresArchivos.length > 0 && (
           <ul className="space-y-1 text-sm text-red-600">{erroresArchivos.map((m) => <li key={m}>{m}</li>)}</ul>
         )}

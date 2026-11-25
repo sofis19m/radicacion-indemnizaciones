@@ -2,12 +2,12 @@ import "server-only";
 import { db } from "@/lib/supabase/admin";
 import { env } from "@/lib/env";
 import { registrarEvento } from "@/lib/eventos";
-import { analizarReclamacion, ErrorIA, VERSION_PROMPT, type RespuestaIA } from "@/lib/ia/analizar";
+import { analizarReclamacion, ErrorIA, esModeloDeMenorCapacidad, VERSION_PROMPT } from "@/lib/ia/analizar";
+import { crucesEntreDocumentos, validarDocumento, type DocParaCruce } from "@/lib/validacion";
 import { evaluarExpediente, resumenParaBeneficiario, type DocumentoEvaluable } from "@/lib/expediente";
 import type { Preliminar } from "@/lib/ia/base-conocimiento";
 import {
-  DOCUMENTOS_CON_FIRMA,
-  normalizarDocumento,
+  NOMBRE_DOCUMENTO,
   type EstadoDocumento,
   type TipoDocumento,
   type TipoReclamacion,
@@ -15,7 +15,6 @@ import {
 
 const MAX_INTENTOS_IA = 3;
 const CONFIANZA_MINIMA_TIPO = 0.6;
-const CONFIANZA_MINIMA_DOC = 0.5;
 const BYTES_POR_LLAMADA = 12 * 1024 * 1024;
 
 type Reclamacion = {
@@ -37,6 +36,7 @@ type Reclamacion = {
 };
 
 type Documento = DocumentoEvaluable & {
+  tipo_declarado: TipoDocumento | null;
   storage_path: string;
   mime: string;
   bytes: number;
@@ -60,52 +60,20 @@ async function soltarCandado(id: string) {
   await db().from("reclamaciones").update({ procesando_hasta: null }).eq("id", id);
 }
 
-/**
- * Valida con reglas determinísticas lo que extrajo el modelo. El modelo dice qué
- * ve; el código decide si el documento sirve. Así una alucinación del modelo no
- * puede, por sí sola, completar un expediente.
- */
-export function validarDocumento(
-  extraido: RespuestaIA["documentos"][number],
-  rec: Pick<Reclamacion, "asegurado_documento" | "beneficiario_documento">,
-): { estado: EstadoDocumento; motivo: string | null } {
-  const numero = normalizarDocumento(extraido.numero_documento_titular);
-  const asegurado = normalizarDocumento(rec.asegurado_documento);
-  const beneficiario = normalizarDocumento(rec.beneficiario_documento);
-
-  // Regla 1: si no se puede leer, es ILEGIBLE (aunque no se sepa con certeza qué documento es).
-  // Al beneficiario se le pide una foto más nítida, que es lo que de verdad necesita hacer.
-  if (!extraido.legible) return { estado: "ilegible", motivo: null };
-  // Regla 2: se lee, pero no es ninguno de los documentos esperados (o el modelo no está seguro).
-  if (extraido.tipo === "otro" || extraido.confianza < CONFIANZA_MINIMA_DOC) {
-    return { estado: "no_reconocido", motivo: null };
-  }
-  if (DOCUMENTOS_CON_FIRMA.includes(extraido.tipo) && extraido.tiene_firma === false) {
-    return { estado: "sin_firma", motivo: null };
-  }
-
-  const titularEsperado: Partial<Record<TipoDocumento, { numero: string; quien: string; obligatorio: boolean }>> = {
-    documento_identidad_asegurado: { numero: asegurado, quien: "la persona asegurada", obligatorio: true },
-    documento_identidad_beneficiario: { numero: beneficiario, quien: "usted como beneficiario", obligatorio: true },
-    registro_civil_defuncion: { numero: asegurado, quien: "la persona asegurada", obligatorio: false },
-    certificado_medico_defuncion: { numero: asegurado, quien: "la persona asegurada", obligatorio: false },
-    dictamen_pcl: { numero: asegurado, quien: "la persona asegurada", obligatorio: false },
-    historia_clinica: { numero: asegurado, quien: "la persona asegurada", obligatorio: false },
-    certificacion_bancaria: { numero: beneficiario, quien: "usted como beneficiario", obligatorio: false },
-  };
-  const esperado = titularEsperado[extraido.tipo];
-  if (esperado) {
-    if (!numero && esperado.obligatorio) {
-      return { estado: "ilegible", motivo: "No se alcanza a leer el número de identificación." };
+/** Descarga un archivo del almacenamiento con hasta 3 intentos (fallas de red pasajeras). */
+async function descargarConReintentos(ruta: string): Promise<Blob> {
+  let ultimo = "";
+  for (let intento = 1; intento <= 3; intento++) {
+    try {
+      const { data, error } = await db().storage.from("documentos").download(ruta);
+      if (data) return data;
+      ultimo = error?.message ?? "sin datos";
+    } catch (e) {
+      ultimo = (e as Error).message;
     }
-    if (numero && numero !== esperado.numero) {
-      return {
-        estado: "no_corresponde",
-        motivo: `El número de identificación del documento no coincide con el de ${esperado.quien}.`,
-      };
-    }
+    await new Promise((r) => setTimeout(r, 1000 * intento));
   }
-  return { estado: "valido", motivo: null };
+  throw new Error(`${ruta}: ${ultimo}`);
 }
 
 /** El relato debe contener literalmente la evidencia citada; si no, el modelo la inventó. */
@@ -136,7 +104,7 @@ async function cargarCaso(id: string) {
   if (error || !rec) throw new Error(`No existe la reclamación ${id}`);
   const { data: docs } = await db()
     .from("documentos")
-    .select("id, nombre_original, tipo_detectado, estado, motivo, created_at, storage_path, mime, bytes, sha256")
+    .select("id, nombre_original, tipo_detectado, tipo_declarado, cara, estado, motivo, created_at, storage_path, mime, bytes, sha256")
     .eq("reclamacion_id", id)
     .order("created_at");
   return { rec: rec as Reclamacion, docs: (docs ?? []) as Documento[] };
@@ -168,17 +136,23 @@ export async function procesarReclamacion(id: string, actor = "sistema"): Promis
       const grupos = pendientes.length ? agruparPorTamano(pendientes) : [[]];
 
       for (const grupo of grupos) {
-        const archivos = await Promise.all(
+        let archivos;
+        try {
+          archivos = await Promise.all(
           grupo.map(async (d, i) => {
-            const { data, error } = await db().storage.from("documentos").download(d.storage_path);
-            if (error || !data) throw new Error(`No se pudo leer ${d.storage_path}: ${error?.message}`);
-            return { indice: i, mime: d.mime, base64: Buffer.from(await data.arrayBuffer()).toString("base64"), nombre: d.nombre_original };
+            const data = await descargarConReintentos(d.storage_path);
+            return { indice: i, mime: d.mime, base64: Buffer.from(await data.arrayBuffer()).toString("base64"), nombre: d.nombre_original, tipoDeclarado: d.tipo_declarado };
           }),
-        );
+          );
+        } catch (e) {
+          // Falla de almacenamiento o de red: cuenta como intento fallido, queda registrado y el cron reintenta
+          await manejarFalloIA(rec, `No se pudieron leer los archivos del almacenamiento: ${(e as Error).message}`);
+          return;
+        }
 
         const entradaResumen = {
           relato: rec.relato,
-          documentos: grupo.map((d, i) => ({ indice: i, documento_id: d.id, sha256: d.sha256, nombre: d.nombre_original })),
+          documentos: grupo.map((d, i) => ({ indice: i, documento_id: d.id, sha256: d.sha256, nombre: d.nombre_original, casilla: d.tipo_declarado })),
           contexto_previo: contexto || null,
           pista_preliminar: pista ?? null,
         };
@@ -196,7 +170,7 @@ export async function procesarReclamacion(id: string, actor = "sistema"): Promis
         } catch (e) {
           const err = e as ErrorIA;
           await db().from("ejecuciones_ia").insert({
-            reclamacion_id: id, modelo: `${env.geminiModel} → ${env.geminiModelRespaldo}`, version_prompt: VERSION_PROMPT,
+            reclamacion_id: id, modelo: env.geminiModelos.join(" → "), version_prompt: VERSION_PROMPT,
             entrada_resumen: entradaResumen, salida: err.crudo ? { crudo: err.crudo } : null, ok: false, error: err.message,
           });
           await manejarFalloIA(rec, err.message);
@@ -214,7 +188,14 @@ export async function procesarReclamacion(id: string, actor = "sistema"): Promis
 
         const r = resultado.respuesta;
         // Evidencia no verificable => la confianza se castiga: no confiamos en lo que no podemos comprobar.
-        const confianza = evidenciaVerificable(rec.relato, r.evidencia_relato) ? r.confianza_tipo : Math.min(r.confianza_tipo, 0.55);
+        let confianza = evidenciaVerificable(rec.relato, r.evidencia_relato) ? r.confianza_tipo : Math.min(r.confianza_tipo, 0.55);
+        // Si respondió un modelo de menor capacidad, el caso no se completa solo: lo confirma un analista.
+        if (esModeloDeMenorCapacidad(resultado.modelo)) {
+          confianza = Math.min(confianza, 0.59);
+          await registrarEvento(id, "analisis_con_modelo_de_menor_capacidad", "sistema", {
+            modelo: resultado.modelo, efecto: "El expediente pasa a revisión manual en lugar de completarse automáticamente.",
+          });
+        }
         if (!respuestaTipo || confianza > respuestaTipo.confianza) {
           respuestaTipo = { tipo: r.tipo_reclamacion, confianza, evidencia: r.evidencia_relato, razon: r.razon_tipo };
         }
@@ -223,20 +204,34 @@ export async function procesarReclamacion(id: string, actor = "sistema"): Promis
           const extraido = r.documentos.find((x) => x.indice === i);
           if (!extraido) {
             // El modelo omitió un archivo: no se asume nada, queda para revisión.
-            await actualizarDocumento(d.id, { tipo_detectado: null, estado: "no_reconocido", motivo: null, datos_extraidos: null, confianza: null });
+            await actualizarDocumento(d.id, { tipo_detectado: null, estado: "no_reconocido", motivo: null, datos_extraidos: null, confianza: null, cara: null, problemas: [], elementos_faltantes: [], alertas_analista: [] });
             continue;
           }
-          const { estado, motivo } = validarDocumento(extraido, rec);
+          const v = validarDocumento(extraido, rec);
+          // Si lo que llegó no es lo de la casilla, se evalúa por lo que realmente es y se le explica a la persona
+          const otraCasilla = d.tipo_declarado && extraido.tipo !== d.tipo_declarado && extraido.tipo !== "otro";
+          const motivo = otraCasilla
+            ? `Lo subió en "${NOMBRE_DOCUMENTO[d.tipo_declarado!]}", pero parece ser: ${NOMBRE_DOCUMENTO[extraido.tipo]}.${v.motivo ? " " + v.motivo : ""}`
+            : v.motivo;
           await actualizarDocumento(d.id, {
             tipo_detectado: extraido.tipo === "otro" ? null : extraido.tipo,
-            estado,
+            estado: v.estado,
             motivo,
             datos_extraidos: extraido,
             confianza: extraido.confianza,
+            cara: extraido.cara,
+            problemas: extraido.problemas,
+            elementos_faltantes: extraido.elementos_faltantes,
+            alertas_analista: v.alertasAnalista,
           });
           await registrarEvento(id, "documento_revisado", "ia", {
-            documento_id: d.id, tipo: extraido.tipo, estado, motivo, confianza: extraido.confianza, observacion: extraido.observacion,
+            documento_id: d.id, casilla: d.tipo_declarado, tipo: extraido.tipo, estado: v.estado, motivo,
+            problemas: extraido.problemas, elementos_faltantes: extraido.elementos_faltantes,
+            alertas_analista: v.alertasAnalista, confianza: extraido.confianza, observacion: extraido.observacion,
           });
+          if (otraCasilla) {
+            await registrarEvento(id, "documento_en_casilla_equivocada", "ia", { documento_id: d.id, casilla: d.tipo_declarado, detectado: extraido.tipo });
+          }
         }
       }
     }
@@ -257,7 +252,11 @@ export async function procesarReclamacion(id: string, actor = "sistema"): Promis
       }
     }
 
-    await db().from("reclamaciones").update({ intentos_ia: 0, ultimo_error_ia: null }).eq("id", id);
+    // Cruces entre documentos (fechas, nombres): alertas para el analista
+    const { data: paraCruce } = await db().from("documentos").select("tipo_detectado, estado, datos_extraidos").eq("reclamacion_id", id);
+    const alertasCruce = crucesEntreDocumentos((paraCruce ?? []) as DocParaCruce[], rec.asegurado_nombre);
+    await db().from("reclamaciones").update({ intentos_ia: 0, ultimo_error_ia: null, alertas_cruce: alertasCruce }).eq("id", id);
+    if (alertasCruce.length) await registrarEvento(id, "alertas_cruce_documentos", "sistema", { alertas: alertasCruce });
     await reevaluar(id, actor);
   } finally {
     await soltarCandado(id);
@@ -266,7 +265,10 @@ export async function procesarReclamacion(id: string, actor = "sistema"): Promis
 
 async function actualizarDocumento(
   id: string,
-  campos: { tipo_detectado: TipoDocumento | null; estado: EstadoDocumento; motivo: string | null; datos_extraidos: unknown; confianza: number | null },
+  campos: {
+    tipo_detectado: TipoDocumento | null; estado: EstadoDocumento; motivo: string | null; datos_extraidos: unknown; confianza: number | null;
+    cara: string | null; problemas: string[]; elementos_faltantes: string[]; alertas_analista: string[];
+  },
 ) {
   await db().from("documentos").update({ ...campos, revisado_at: new Date().toISOString() }).eq("id", id);
 }

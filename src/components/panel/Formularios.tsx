@@ -39,7 +39,8 @@ export function FormDocumento({ id, reclamacionId, tipo, estado }: { id: string;
         <option value="sin_firma">Sin firma</option>
         <option value="ilegible">Ilegible</option>
         <option value="no_corresponde">No corresponde</option>
-        <option value="vencido_o_incompleto">Vencido o incompleto</option>
+        <option value="incompleto">Incompleto</option>
+        <option value="vencido">Vencido</option>
         <option value="no_reconocido">No reconocido</option>
       </select>
       <input name="motivo" placeholder="Nota para el beneficiario (opcional)" className="campo !py-1.5 text-sm sm:col-span-2" />

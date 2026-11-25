@@ -10,7 +10,7 @@ import { ESCENARIOS } from "./escenarios";
 const admin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
 
 // Qué estado de documento se espera según la variante del escenario
-const ESPERADO_VARIANTE: Record<string, string> = { ok: "valido", sin_firma: "sin_firma", ilegible: "ilegible", otra_persona: "no_corresponde" };
+const ESPERADO_VARIANTE: Record<string, string> = { ok: "valido", sin_firma: "sin_firma", ilegible: "ilegible", otra_persona: "no_corresponde", frente: "valido", reverso: "valido", vencido: "vencido" };
 
 async function main() {
   const filas: string[] = [];

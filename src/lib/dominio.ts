@@ -26,6 +26,8 @@ export type EstadoDocumento =
   | "ilegible"
   | "no_corresponde"
   | "vencido_o_incompleto"
+  | "incompleto"
+  | "vencido"
   | "no_reconocido";
 
 const MUERTE_BASE: TipoDocumento[] = [
@@ -88,10 +90,12 @@ export const AYUDA_DOCUMENTO: Record<TipoDocumento, string> = {
 
 /** Mensaje al beneficiario cuando el documento llegó pero no sirve. Distinto de "falta". */
 export const MOTIVO_ESTADO: Record<Exclude<EstadoDocumento, "valido" | "pendiente_revision">, string> = {
-  sin_firma: "Llegó, pero no tiene firma. Por favor fírmelo y vuelva a enviarlo.",
+  sin_firma: "Llegó, pero le falta la firma o la huella. Por favor complételo y vuelva a enviarlo.",
   ilegible: "Llegó, pero no se puede leer bien. Envíe una foto más nítida o un escaneo.",
   no_corresponde: "Llegó, pero los datos no coinciden con los de la reclamación. Revise que sea el documento de la persona correcta.",
   vencido_o_incompleto: "Llegó, pero está incompleto o desactualizado.",
+  incompleto: "Llegó, pero le falta información.",
+  vencido: "Llegó, pero ya no está vigente.",
   no_reconocido: "Recibimos este archivo, pero no pudimos identificar qué documento es.",
 };
 

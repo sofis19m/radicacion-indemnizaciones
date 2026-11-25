@@ -2,32 +2,38 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import SelectorArchivos, { validarEnCliente } from "./SelectorArchivos";
+import SubirPorCasillas, { aplanar, MAX_ARCHIVOS, validarEnCliente, type ArchivosPorCasilla } from "./SubirPorCasillas";
 import { metaDe, subirYConfirmar } from "@/lib/subirArchivos";
 
-export default function SubirMas({ token }: { token: string }) {
+/**
+ * Subir documentos desde el enlace de seguimiento. Muestra primero las casillas
+ * que faltan o que hay que corregir, cada una con su problema concreto.
+ */
+export default function SubirMas({ token, pendientes, estados }: { token: string; pendientes: string[]; estados: Record<string, string> }) {
   const router = useRouter();
-  const [archivos, setArchivos] = useState<File[]>([]);
+  const [archivos, setArchivos] = useState<ArchivosPorCasilla>({});
   const [estado, setEstado] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
+  const lista = aplanar(archivos);
 
   async function enviar() {
     setError(null);
-    const errores = validarEnCliente(archivos);
+    const errores = validarEnCliente(lista.map((x) => x.file));
+    if (lista.length > MAX_ARCHIVOS) errores.push(`Máximo ${MAX_ARCHIVOS} archivos por envío.`);
     if (errores.length) return setError(errores.join(" "));
     setEnviando(true);
     try {
       const res = await fetch(`/api/seguimiento/${token}/cupos`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ archivos: metaDe(archivos) }),
+        body: JSON.stringify({ archivos: metaDe(lista) }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error);
-      const r = await subirYConfirmar(archivos, json, (h, t) => setEstado(`Subiendo ${h} de ${t}…`));
-      setArchivos([]);
-      const partes = [`Recibimos ${r.aceptados} documento(s).`];
+      const r = await subirYConfirmar(lista.map((x) => x.file), json, (h, t) => setEstado(`Subiendo ${h} de ${t}…`));
+      setArchivos({});
+      const partes = [`Recibimos ${r.aceptados} documento(s). En un momento verá aquí el resultado de la revisión.`];
       if (r.duplicados) partes.push(`${r.duplicados} ya los teníamos, así que no los repetimos.`);
       if (r.rechazados.length) partes.push(r.rechazados.join(" "));
       setEstado(partes.join(" "));
@@ -41,11 +47,11 @@ export default function SubirMas({ token }: { token: string }) {
   }
 
   return (
-    <div className="space-y-3">
-      <SelectorArchivos archivos={archivos} onChange={setArchivos} />
-      {archivos.length > 0 && (
+    <div className="space-y-4">
+      <SubirPorCasillas valor={archivos} onChange={setArchivos} pendientes={pendientes.length ? pendientes : undefined} estados={estados} />
+      {lista.length > 0 && (
         <button className="boton w-full" onClick={enviar} disabled={enviando}>
-          {enviando ? estado ?? "Enviando…" : `Enviar ${archivos.length} documento(s)`}
+          {enviando ? estado ?? "Enviando…" : `Enviar ${lista.length} documento(s)`}
         </button>
       )}
       {!enviando && estado && <p className="rounded-lg bg-green-50 p-3 text-sm text-green-800">{estado}</p>}

@@ -8,7 +8,7 @@ import Semaforo from "@/components/panel/Semaforo";
 import { FormDecision, FormDocumento, FormReintentar, FormTipo } from "@/components/panel/Formularios";
 
 const ETIQUETA_ESTADO_DOC: Record<string, string> = {
-  pendiente_revision: "⏳ Pendiente", valido: "✅ Válido", sin_firma: "✍️ Sin firma", ilegible: "🔍 Ilegible",
+  pendiente_revision: "⏳ Pendiente", valido: "✅ Válido", sin_firma: "✍️ Sin firma/huella", ilegible: "🔍 Ilegible", incompleto: "⬜ Incompleto", vencido: "📅 Vencido",
   no_corresponde: "🚫 No corresponde", vencido_o_incompleto: "📅 Vencido/incompleto", no_reconocido: "❓ No reconocido",
 };
 
@@ -61,6 +61,22 @@ export default async function Caso({ params }: { params: Promise<{ id: string }>
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
+          {(() => {
+            const alertas = [
+              ...((r.alertas_cruce ?? []) as string[]).map((a) => ({ a, origen: "Cruce entre documentos" })),
+              ...documentos.flatMap((d) => ((d.alertas_analista ?? []) as string[]).map((a) => ({ a, origen: d.tipo_detectado ? NOMBRE_DOCUMENTO[d.tipo_detectado as TipoDocumento] : d.nombre_original }))),
+            ];
+            return alertas.length ? (
+              <section className="tarjeta border-amber-300 bg-amber-50">
+                <h2 className="font-semibold text-amber-900">⚠️ Alertas para revisar ({alertas.length})</h2>
+                <p className="text-xs text-amber-800">No bloquean el expediente: son asuntos de fondo que decide una persona.</p>
+                <ul className="mt-2 space-y-1 text-sm text-amber-900">
+                  {alertas.map((x, i) => <li key={i}><span className="font-medium">{x.origen}:</span> {x.a}</li>)}
+                </ul>
+              </section>
+            ) : null;
+          })()}
+
           {/* Lo que determinó el sistema y con qué información */}
           <section className="tarjeta">
             <h2 className="font-semibold">Clasificación</h2>
@@ -116,6 +132,8 @@ export default async function Caso({ params }: { params: Promise<{ id: string }>
                       <div>
                         <p className="font-medium">{d.tipo_detectado ? NOMBRE_DOCUMENTO[d.tipo_detectado as TipoDocumento] : "Sin identificar"}</p>
                         <p className="text-xs text-gray-500">
+                          {d.tipo_declarado ? <>Subido en «{NOMBRE_DOCUMENTO[d.tipo_declarado as TipoDocumento]}»{d.tipo_detectado && d.tipo_detectado !== d.tipo_declarado && <span className="font-semibold text-amber-700"> (no coincide)</span>} · </> : "Subido en «Otros» · "}
+                          {d.cara && d.cara !== "no_aplica" && <>cara: {d.cara} · </>}
                           {d.nombre_original} · recibido {fechaHora(d.created_at)}
                           {d.confianza != null && ` · confianza ${Math.round(Number(d.confianza) * 100)}%`}
                           {d.estado_corregido_por && " · corregido por analista"}
@@ -127,9 +145,11 @@ export default async function Caso({ params }: { params: Promise<{ id: string }>
                         {r.estado !== "cerrado" && <FormDocumento id={d.id} reclamacionId={r.id} tipo={d.tipo_detectado} estado={d.estado} />}
                       </div>
                     </div>
-                    {(d.motivo || x) && (
+                    {(d.motivo || x || (d.problemas ?? []).length > 0) && (
                       <div className="mt-1 text-xs text-gray-600">
                         {d.motivo && <p>{d.motivo}</p>}
+                        {(d.problemas ?? []).length > 0 && <p>Problemas: {(d.problemas as string[]).map((c) => c.replaceAll("_", " ")).join(", ")}</p>}
+                        {(d.elementos_faltantes ?? []).length > 0 && <p>Le falta según la ficha: {(d.elementos_faltantes as string[]).join("; ")}</p>}
                         {x && (
                           <p>
                             Extraído: titular {String(x.nombre_titular ?? "—")} · doc. {String(x.numero_documento_titular ?? "—")}

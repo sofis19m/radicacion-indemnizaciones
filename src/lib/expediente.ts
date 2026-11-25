@@ -9,6 +9,7 @@ import {
   type TipoDocumento,
   type TipoReclamacion,
 } from "@/lib/dominio";
+import { FICHAS } from "@/lib/ia/fichas-documentos";
 
 export type DocumentoEvaluable = {
   id: string;
@@ -17,6 +18,8 @@ export type DocumentoEvaluable = {
   estado: EstadoDocumento;
   motivo: string | null;
   created_at: string;
+  /** Para documentos de identidad: qué cara se ve (frente, reverso o ambas). */
+  cara?: string | null;
 };
 
 export type ItemChecklist = {
@@ -43,15 +46,32 @@ export function evaluarExpediente(tipo: TipoReclamacion, documentos: DocumentoEv
   for (const req of requeridos) {
     const delTipo = documentos.filter((d) => d.tipo_detectado === req);
     // Si hay varios del mismo tipo, basta con que uno sea válido (el más antiguo válido cuenta).
-    const valido = delTipo
-      .filter((d) => d.estado === "valido")
-      .sort((a, b) => a.created_at.localeCompare(b.created_at))[0];
+    const validos = delTipo.filter((d) => d.estado === "valido").sort((a, b) => a.created_at.localeCompare(b.created_at));
+    let valido: DocumentoEvaluable | undefined = validos[0];
+    let faltaCara: string | null = null;
+    // Documentos de identidad: deben verse ambas caras, en un archivo o en dos (frente + reverso)
+    if (valido && FICHAS[req as Exclude<TipoDocumento, "otro">]?.requiereAmbasCaras) {
+      const ambas = validos.find((d) => !d.cara || d.cara === "ambas" || d.cara === "no_aplica");
+      const frente = validos.find((d) => d.cara === "frente");
+      const reverso = validos.find((d) => d.cara === "reverso");
+      if (ambas) valido = ambas;
+      else if (frente && reverso) valido = frente.created_at > reverso.created_at ? frente : reverso;
+      else {
+        faltaCara = frente ? "el reverso" : "el frente";
+        valido = undefined;
+      }
+    }
     const enRevision = delTipo.find((d) => d.estado === "pendiente_revision");
     const noSirve = delTipo.filter((d) => d.estado !== "valido" && d.estado !== "pendiente_revision").at(-1);
 
     if (valido) {
       checklist.push({ tipo: req, nombre: NOMBRE_DOCUMENTO[req], situacion: "recibido_valido", detalle: "Recibido y revisado.", documentoId: valido.id });
       fechasValidas.push(valido.created_at);
+    } else if (faltaCara) {
+      checklist.push({
+        tipo: req, nombre: NOMBRE_DOCUMENTO[req], situacion: "recibido_no_sirve",
+        detalle: `Recibimos solo una cara. Falta ${faltaCara} del documento.`, documentoId: validos[0]?.id,
+      });
     } else if (enRevision) {
       checklist.push({ tipo: req, nombre: NOMBRE_DOCUMENTO[req], situacion: "en_revision", detalle: "Lo estamos revisando.", documentoId: enRevision.id });
     } else if (noSirve) {
