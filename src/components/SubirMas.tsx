@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import SubirPorCasillas, { aplanar, MAX_ARCHIVOS, validarEnCliente, type ArchivosPorCasilla } from "./SubirPorCasillas";
 import { metaDe, subirYConfirmar } from "@/lib/subirArchivos";
+import type { TipoDocumento } from "@/lib/dominio";
 
 /**
  * Subir documentos desde el enlace de seguimiento. Muestra primero las casillas
@@ -48,9 +49,10 @@ export default function SubirMas({ token, pendientes, estados }: { token: string
 
   return (
     <div className="space-y-4">
-      <SubirPorCasillas valor={archivos} onChange={setArchivos} pendientes={pendientes.length ? pendientes : undefined} estados={estados} />
+      <SubirPorCasillas valor={archivos} onChange={setArchivos} recomendados={pendientes.length ? (pendientes as TipoDocumento[]) : null}
+        textoRecomendados="Estos son los documentos que nos faltan o que hay que corregir." avisos={estados} />
       {lista.length > 0 && (
-        <button className="boton w-full" onClick={enviar} disabled={enviando}>
+        <button className="btn primary" onClick={enviar} disabled={enviando}>
           {enviando ? estado ?? "Enviando…" : `Enviar ${lista.length} documento(s)`}
         </button>
       )}

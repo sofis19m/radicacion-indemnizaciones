@@ -68,7 +68,7 @@ export default async function Seguimiento({
   );
 
   return (
-    <main className="mx-auto max-w-2xl px-4 py-8">
+    <div className="rad"><main className="mx-auto max-w-2xl px-4 py-8">
       {enProceso && <Refrescar cadaMs={5000} />}
 
       {nuevo && (
@@ -163,6 +163,6 @@ export default async function Seguimiento({
       <p className="mt-10 text-center text-xs text-gray-500">
         Radicada el {new Date(r.radicado_at).toLocaleDateString("es-CO", { day: "numeric", month: "long", year: "numeric" })} · No comparta este enlace.
       </p>
-    </main>
+    </main></div>
   );
 }

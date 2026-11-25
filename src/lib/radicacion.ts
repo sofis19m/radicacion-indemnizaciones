@@ -30,6 +30,8 @@ export const DatosRadicacion = z.object({
   consentimiento: z.literal(true, { message: "Debe autorizar el tratamiento de datos para continuar" }),
   idempotency_key: z.string().uuid(),
   sitio_web: z.string().optional(), // trampa para bots
+  /** Lo que indicó en "¿Qué ocurrió?". Organiza el formulario; no es la clasificación oficial. */
+  situacion_declarada: z.enum(["fallecimiento", "accidente", "incapacidad"]).nullable().optional(),
   archivos: z.array(MetaArchivo).min(1, "Adjunte al menos un documento.").max(LIMITES.archivosPorEnvio, `Máximo ${LIMITES.archivosPorEnvio} archivos por envío.`),
 });
 export type DatosRadicacion = z.infer<typeof DatosRadicacion>;

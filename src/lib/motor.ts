@@ -6,8 +6,10 @@ import { analizarReclamacion, ErrorIA, esModeloDeMenorCapacidad, VERSION_PROMPT 
 import { crucesEntreDocumentos, validarDocumento, type DocParaCruce } from "@/lib/validacion";
 import { evaluarExpediente, resumenParaBeneficiario, type DocumentoEvaluable } from "@/lib/expediente";
 import type { Preliminar } from "@/lib/ia/base-conocimiento";
+import { SITUACIONES } from "@/lib/casillas";
 import {
   NOMBRE_DOCUMENTO,
+  NOMBRE_TIPO_RECLAMACION,
   type EstadoDocumento,
   type TipoDocumento,
   type TipoReclamacion,
@@ -29,6 +31,7 @@ type Reclamacion = {
   tipo_sugerido: TipoReclamacion | null;
   tipo_final: TipoReclamacion | null;
   tipo_preliminar: TipoReclamacion | null;
+  situacion_declarada: "fallecimiento" | "accidente" | "incapacidad" | null;
   preliminar: Preliminar | null;
   completo_at: string | null;
   primera_respuesta_at: string | null;
@@ -255,6 +258,14 @@ export async function procesarReclamacion(id: string, actor = "sistema"): Promis
     // Cruces entre documentos (fechas, nombres): alertas para el analista
     const { data: paraCruce } = await db().from("documentos").select("tipo_detectado, estado, datos_extraidos").eq("reclamacion_id", id);
     const alertasCruce = crucesEntreDocumentos((paraCruce ?? []) as DocParaCruce[], rec.asegurado_nombre);
+    // Lo que indicó el beneficiario en "¿Qué ocurrió?" frente a lo que determinó el sistema
+    const tipoActual = rec.tipo_final ?? respuestaTipo?.tipo ?? rec.tipo_sugerido;
+    const equivalente = rec.situacion_declarada ? SITUACIONES.find((s) => s.id === rec.situacion_declarada)?.tipoEquivalente : null;
+    if (equivalente && tipoActual && equivalente !== tipoActual) {
+      alertasCruce.push(
+        `El beneficiario indicó "${SITUACIONES.find((s) => s.id === rec.situacion_declarada)!.titulo}", pero el relato y los documentos apuntan a ${NOMBRE_TIPO_RECLAMACION[tipoActual]}.`,
+      );
+    }
     await db().from("reclamaciones").update({ intentos_ia: 0, ultimo_error_ia: null, alertas_cruce: alertasCruce }).eq("id", id);
     if (alertasCruce.length) await registrarEvento(id, "alertas_cruce_documentos", "sistema", { alertas: alertasCruce });
     await reevaluar(id, actor);

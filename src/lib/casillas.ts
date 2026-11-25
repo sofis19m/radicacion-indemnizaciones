@@ -1,10 +1,17 @@
-// Casillas del formulario: una por documento, agrupadas por situación.
-// No se le pregunta al beneficiario el tipo de reclamación: ve todas las
-// casillas y sube lo que tiene. Lo que suba en cada una es una pista más para
-// el sistema, que igual verifica el contenido de cada archivo.
-import type { TipoDocumento } from "@/lib/dominio";
+// Casillas del formulario: una por documento, agrupadas.
+// La sección "¿Qué ocurrió?" del formulario solo decide qué casillas se muestran.
+// La clasificación oficial la hace el sistema con el relato y los documentos.
+import type { TipoDocumento, TipoReclamacion } from "@/lib/dominio";
 
-export type Casilla = { tipo: TipoDocumento; titulo: string; ayuda: string; variasFotos?: boolean };
+export type Situacion = "fallecimiento" | "accidente" | "incapacidad";
+
+export const SITUACIONES: { id: Situacion; titulo: string; descripcion: string; tipoEquivalente: TipoReclamacion }[] = [
+  { id: "fallecimiento", titulo: "Fallecimiento de la persona asegurada", descripcion: "Por enfermedad u otra causa natural.", tipoEquivalente: "muerte_natural" },
+  { id: "accidente", titulo: "Fallecimiento por accidente o hecho violento", descripcion: "Accidente de tránsito, hecho criminal u otro suceso.", tipoEquivalente: "muerte_accidental" },
+  { id: "incapacidad", titulo: "Incapacidad de la persona asegurada", descripcion: "Pérdida de capacidad laboral por enfermedad o accidente.", tipoEquivalente: "incapacidad_total_permanente" },
+];
+
+export type Casilla = { tipo: TipoDocumento; titulo: string; ayuda: string; variasFotos?: boolean; situaciones?: Situacion[] };
 export type GrupoCasillas = { id: string; titulo: string; descripcion: string; casillas: Casilla[] };
 
 export const GRUPOS_CASILLAS: GrupoCasillas[] = [
@@ -28,26 +35,26 @@ export const GRUPOS_CASILLAS: GrupoCasillas[] = [
   },
   {
     id: "fallecimiento",
-    titulo: "Si la persona asegurada falleció",
+    titulo: "Por el fallecimiento",
     descripcion: "",
     casillas: [
-      { tipo: "registro_civil_defuncion", titulo: "Registro civil de defunción", ayuda: "Lo expide la notaría o registraduría." },
-      { tipo: "certificado_medico_defuncion", titulo: "Certificado médico de defunción", ayuda: "Lo expide el médico o la clínica." },
+      { tipo: "registro_civil_defuncion", titulo: "Registro civil de defunción", ayuda: "Lo expide la notaría o registraduría.", situaciones: ["fallecimiento", "accidente"] },
+      { tipo: "certificado_medico_defuncion", titulo: "Certificado médico de defunción", ayuda: "Lo expide el médico o la clínica.", situaciones: ["fallecimiento", "accidente"] },
     ],
   },
   {
     id: "accidente",
-    titulo: "Si el fallecimiento fue por un accidente o un hecho violento",
+    titulo: "Por el accidente o hecho violento",
     descripcion: "",
-    casillas: [{ tipo: "informe_autoridad", titulo: "Informe de policía, fiscalía o medicina legal", ayuda: "Informe de tránsito, noticia criminal o necropsia." }],
+    casillas: [{ tipo: "informe_autoridad", titulo: "Informe de policía, fiscalía o medicina legal", ayuda: "Informe de tránsito, noticia criminal o necropsia.", situaciones: ["accidente"] }],
   },
   {
     id: "incapacidad",
-    titulo: "Si reclama por una incapacidad",
+    titulo: "Por la incapacidad",
     descripcion: "",
     casillas: [
-      { tipo: "dictamen_pcl", titulo: "Dictamen de pérdida de capacidad laboral", ayuda: "De la junta de calificación, EPS, ARL o fondo de pensiones." },
-      { tipo: "historia_clinica", titulo: "Historia clínica resumida", ayuda: "O la epicrisis de la clínica u hospital." },
+      { tipo: "dictamen_pcl", titulo: "Dictamen de pérdida de capacidad laboral", ayuda: "De la junta de calificación, EPS, ARL o fondo de pensiones.", situaciones: ["incapacidad"] },
+      { tipo: "historia_clinica", titulo: "Historia clínica resumida", ayuda: "O la epicrisis de la clínica u hospital.", situaciones: ["incapacidad"] },
     ],
   },
   {

@@ -5,6 +5,7 @@ import { db } from "@/lib/supabase/admin";
 import { evaluarExpediente, type DocumentoEvaluable } from "@/lib/expediente";
 import { NOMBRE_DOCUMENTO, NOMBRE_TIPO_RECLAMACION, type TipoDocumento, type TipoReclamacion } from "@/lib/dominio";
 import Semaforo from "@/components/panel/Semaforo";
+import { SITUACIONES } from "@/lib/casillas";
 import { FormDecision, FormDocumento, FormReintentar, FormTipo } from "@/components/panel/Formularios";
 
 const ETIQUETA_ESTADO_DOC: Record<string, string> = {
@@ -80,19 +81,32 @@ export default async function Caso({ params }: { params: Promise<{ id: string }>
           {/* Lo que determinó el sistema y con qué información */}
           <section className="tarjeta">
             <h2 className="font-semibold">Clasificación</h2>
-            <div className="mt-2 grid gap-3 text-sm sm:grid-cols-2">
+            <div className="mt-2 grid gap-3 text-sm sm:grid-cols-3">
               <div>
-                <p className="text-gray-500">Sugerida por el modelo</p>
+                <p className="text-gray-500">1 · Pista preliminar (sin IA)</p>
+                <p className="font-medium">{r.tipo_preliminar ? NOMBRE_TIPO_RECLAMACION[r.tipo_preliminar as TipoReclamacion] : "Sin pista clara"}</p>
+                {r.preliminar?.frasesEncontradas?.length > 0 && (
+                  <p className="text-xs text-gray-500">Frases: {r.preliminar.frasesEncontradas.map((f: { texto: string }) => `"${f.texto}"`).join(", ")}</p>
+                )}
+              </div>
+              <div>
+                <p className="text-gray-500">2 · Sugerida por el modelo</p>
                 <p className="font-medium">
                   {r.tipo_sugerido ? NOMBRE_TIPO_RECLAMACION[r.tipo_sugerido as TipoReclamacion] : "—"}
                   {r.tipo_confianza != null && <span className="ml-2 text-gray-500">confianza {Math.round(Number(r.tipo_confianza) * 100)}%</span>}
                 </p>
               </div>
               <div>
-                <p className="text-gray-500">Confirmada por una persona</p>
+                <p className="text-gray-500">3 · Confirmada por una persona</p>
                 <p className="font-medium">{r.tipo_final ? `${NOMBRE_TIPO_RECLAMACION[r.tipo_final as TipoReclamacion]} · ${fechaHora(r.tipo_confirmado_at)}` : "Pendiente"}</p>
               </div>
             </div>
+            {r.situacion_declarada && (
+              <p className="mt-3 text-sm text-gray-600">
+                <span className="font-medium">Lo que indicó el beneficiario en el formulario:</span>{" "}
+                {SITUACIONES.find((s) => s.id === r.situacion_declarada)?.titulo} <span className="text-xs text-gray-400">(organiza su formulario; no es la clasificación)</span>
+              </p>
+            )}
             {r.tipo_evidencia && <p className="mt-3 rounded-lg bg-gray-50 p-3 text-sm text-gray-700"><span className="font-medium">Por qué: </span>{r.tipo_evidencia}</p>}
             {r.estado !== "cerrado" && <FormTipo id={r.id} sugerido={r.tipo_sugerido} final={r.tipo_final} />}
             {r.ultimo_error_ia && (

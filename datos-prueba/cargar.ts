@@ -62,6 +62,8 @@ async function radicar(e: Escenario, archivos: Archivo[], llave: string) {
     beneficiario_email: e.beneficiario.email, beneficiario_telefono: "3001234567", parentesco: e.beneficiario.parentesco,
     asegurado_nombre: e.asegurado.nombre, asegurado_documento: e.asegurado.cedula, relato: e.relato,
     consentimiento: true, idempotency_key: llave,
+    // Lo que la persona elige en "¿Qué ocurrió?" (por defecto, la opción que corresponde a su caso)
+    situacion_declarada: e.situacionDeclarada ?? { muerte_natural: "fallecimiento", muerte_accidental: "accidente", incapacidad_total_permanente: "incapacidad" }[e.esperado.tipo],
     archivos: archivos.map((a) => ({ nombre: a.nombre, mime: a.mime, bytes: a.bytes.length, tipo_declarado: a.casilla })),
   };
   const r = await fetch(`${APP}/api/radicar`, { method: "POST", headers: { "Content-Type": "application/json", "X-Forwarded-For": `10.0.${Math.floor(Math.random() * 250)}.${Math.floor(Math.random() * 250)}` }, body: JSON.stringify(cuerpo) });

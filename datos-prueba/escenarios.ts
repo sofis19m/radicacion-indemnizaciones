@@ -19,6 +19,8 @@ export type Escenario = {
   duplicar?: "mismo_envio" | "nueva_radicacion";
   simular?: { dias: number; modo: "antiguedad" | "radicacion" };
   especial?: "falso_pdf" | "repetido_en_envio";
+  /** Lo que la persona elige en "¿Qué ocurrió?" si NO coincide con su caso real. */
+  situacionDeclarada?: "fallecimiento" | "accidente" | "incapacidad";
 };
 
 const MN_COMPLETO: DocEscenario[] = [
@@ -122,7 +124,7 @@ export const ESCENARIOS: Escenario[] = [
     asegurado: a("JUAN PABLO ARANGO VILLA"), beneficiario: b("MARTHA ARANGO VILLA", "Madre"),
     relato: "A mi hijo lo atropelló un bus cuando cruzaba la calle. Murió en la ambulancia. Todavía no tengo el papel de la fiscalía.",
     contexto: { causa: "Trauma craneoencefálico severo por atropellamiento", ciudad: "Barranquilla", fechaEvento: "2026-11-06" }, docs: MN_COMPLETO },
-  { id: "E17", descripcion: "Relato ambiguo (caída); el informe de autoridad define el tipo", esperado: { tipo: "muerte_accidental", completo: true, nota: "clasificación inferida de los documentos" },
+  { id: "E17", descripcion: "Relato ambiguo (caída) y la persona elige \"fallecimiento por enfermedad\"; el informe de autoridad define el tipo", situacionDeclarada: "fallecimiento", esperado: { tipo: "muerte_accidental", completo: true, nota: "el sistema clasifica por los documentos y alerta que no coincide con lo elegido" },
     asegurado: a("RAFAEL HUMBERTO NIETO SOTO"), beneficiario: b("SANDRA NIETO SOTO"),
     relato: "Mi papá se cayó en la obra donde trabajaba y murió en el hospital dos días después.",
     contexto: { causa: "Trauma craneoencefálico por caída de altura en obra", ciudad: "Bogotá D.C.", fechaEvento: "2026-10-29" }, docs: MA_COMPLETO },

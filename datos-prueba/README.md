@@ -35,7 +35,7 @@ Todos los escenarios E29 – E34 son reclamaciones por **muerte natural**: el ti
 | E14 | Natural | Reenvío otro día con los mismos archivos | Un solo expediente; archivos repetidos ignorados; el reloj no se reinicia |
 | E15 | Accidental | Completo (accidente de tránsito) | Completo |
 | E16 | Accidental | Sin informe de autoridad | Incompleto: falta el informe |
-| E17 | Accidental | Relato ambiguo (caída); el informe define el tipo | Clasificado por el documento |
+| E17 | Accidental | Relato ambiguo (caída) y la persona elige "fallecimiento por enfermedad" | Clasificado por el documento como accidental, con alerta al analista porque no coincide con lo elegido |
 | E18 | Accidental | Certificación bancaria de otra persona | Incompleto: no corresponde |
 | E19 | Accidental | Completo hace 25 días | Semáforo **en riesgo** |
 | E20 | Accidental | Falta certificado médico y SARLAFT sin firma | Incompleto: una falta y un error |

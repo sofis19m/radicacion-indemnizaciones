@@ -53,6 +53,7 @@ export async function POST(req: Request) {
       beneficiario_email: d.beneficiario_email,
       beneficiario_telefono: d.beneficiario_telefono || null,
       parentesco: d.parentesco || null,
+      situacion_declarada: d.situacion_declarada ?? null,
       asegurado_nombre: d.asegurado_nombre,
       asegurado_documento: aseguradoDoc,
       relato: d.relato,
