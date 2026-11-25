@@ -47,3 +47,6 @@ CLAUDE.md
 .vscode/
 datos-prueba/generados/
 supabase/TODO_EN_UNO.sql
+
+.vercel
+.env*

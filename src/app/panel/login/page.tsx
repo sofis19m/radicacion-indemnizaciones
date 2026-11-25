@@ -3,6 +3,7 @@
 import { useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createBrowserClient } from "@supabase/ssr";
+import { IcoCandado, IcoCorazon } from "@/components/Iconos";
 
 function Formulario() {
   const router = useRouter();
@@ -24,31 +25,36 @@ function Formulario() {
   }
 
   return (
-    <form onSubmit={entrar} className="tarjeta w-full max-w-sm space-y-4">
-      <div>
-        <p className="text-sm font-semibold uppercase tracking-wide text-marca">Uso interno</p>
-        <h1 className="text-xl font-bold">Panel de analistas</h1>
+    <form onSubmit={entrar} className="sec fade" style={{ width: "100%", maxWidth: 420 }}>
+      <div className="marca" style={{ marginBottom: 18 }}>
+        <div className="logo"><IcoCorazon color="#fff" /></div>
+        <span>Seguros de Vida</span>
       </div>
-      <div>
-        <label className="etiqueta" htmlFor="email">Correo</label>
-        <input id="email" name="email" type="email" className="campo" autoComplete="username" required />
+      <div className="eyebrow">Uso interno</div>
+      <h1 style={{ fontSize: 28, margin: "6px 0 20px" }}>Panel de analistas</h1>
+      <div className="field" style={{ marginBottom: 16 }}>
+        <label htmlFor="email">Correo</label>
+        <input id="email" name="email" type="email" className="inp" autoComplete="username" required />
       </div>
-      <div>
-        <label className="etiqueta" htmlFor="password">Contraseña</label>
-        <input id="password" name="password" type="password" className="campo" autoComplete="current-password" required />
+      <div className="field" style={{ marginBottom: 18 }}>
+        <label htmlFor="password">Contraseña</label>
+        <input id="password" name="password" type="password" className="inp" autoComplete="current-password" required />
       </div>
-      {error && <p className="text-sm text-red-600">{error}</p>}
-      <button className="boton w-full" disabled={cargando}>{cargando ? "Entrando…" : "Entrar"}</button>
+      {error && <div className="alerta" role="alert">{error}</div>}
+      <button className="btn primary" disabled={cargando}>{cargando ? "Entrando…" : "Entrar"}</button>
+      <div className="seguro"><IcoCandado /><span>Acceso solo para analistas autorizados. Las decisiones quedan registradas a su nombre.</span></div>
     </form>
   );
 }
 
 export default function Login() {
   return (
-    <main className="flex min-h-screen items-center justify-center px-4">
-      <Suspense>
-        <Formulario />
-      </Suspense>
-    </main>
+    <div className="rad">
+      <main style={{ minHeight: "100vh", display: "grid", placeItems: "center", padding: "24px 16px" }}>
+        <Suspense>
+          <Formulario />
+        </Suspense>
+      </main>
+    </div>
   );
 }

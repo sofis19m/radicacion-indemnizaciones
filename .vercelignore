@@ -1,0 +1,6 @@
+.env*
+!.env.example
+datos-prueba/generados
+supabase/TODO_EN_UNO.sql
+.claude
+CLAUDE.md
