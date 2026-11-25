@@ -5,19 +5,13 @@ import { evaluarExpediente, type DocumentoEvaluable } from "@/lib/expediente";
 import { NOMBRE_DOCUMENTO, type TipoReclamacion } from "@/lib/dominio";
 import SubirMas from "@/components/SubirMas";
 import Refrescar from "@/components/Refrescar";
+import { BarraAvance, IcoAlerta, IcoCheck, IcoDoc } from "@/components/Iconos";
 
 export const dynamic = "force-dynamic";
 
-const ICONO = { recibido_valido: "✅", recibido_no_sirve: "⚠️", en_revision: "⏳", falta: "⬜" } as const;
-const COLOR = {
-  recibido_valido: "border-green-200 bg-green-50",
-  recibido_no_sirve: "border-amber-300 bg-amber-50",
-  en_revision: "border-gray-200 bg-gray-50",
-  falta: "border-gray-200 bg-white",
-} as const;
-
-function fecha(d: string) {
-  return new Date(d + "T12:00:00").toLocaleDateString("es-CO", { day: "numeric", month: "long", year: "numeric" });
+function fechaLarga(d: string) {
+  const f = d.length === 10 ? new Date(`${d}T12:00:00-05:00`) : new Date(d);
+  return f.toLocaleDateString("es-CO", { timeZone: "America/Bogota", day: "numeric", month: "long", year: "numeric" });
 }
 
 export default async function Seguimiento({
@@ -34,7 +28,7 @@ export default async function Seguimiento({
 
   const { data: r } = await db()
     .from("reclamaciones")
-    .select("radicado, estado, beneficiario_nombre, tipo_sugerido, tipo_final, fecha_vencimiento, radicado_at")
+    .select("radicado, estado, beneficiario_nombre, beneficiario_email, tipo_sugerido, tipo_final, fecha_vencimiento, radicado_at")
     .eq("id", id)
     .single();
   if (!r) notFound();
@@ -59,110 +53,125 @@ export default async function Seguimiento({
   const evaluacion = tipo ? evaluarExpediente(tipo, documentos) : null;
   const pendientes = evaluacion?.checklist.filter((i) => i.situacion === "recibido_no_sirve" || i.situacion === "falta") ?? [];
   const noReconocidos = documentos.filter((d) => !d.tipo_detectado && (d.estado === "no_reconocido" || d.estado === "ilegible"));
-  // Casillas a mostrar primero al subir más documentos: lo que falta, lo que hay que corregir
-  // y lo que el analista pidió adicionalmente.
+  // Casillas a mostrar primero al subir más documentos: lo que falta, lo que hay que
+  // corregir y lo que el analista pidió adicionalmente.
   const solicitados: string[] = decision?.decision === "pedir_documentos" ? decision.documentos_solicitados ?? [] : [];
   const casillasPendientes = [...new Set([...pendientes.map((i) => i.tipo as string), ...solicitados])];
-  const estadosCasilla = Object.fromEntries(
-    pendientes.filter((i) => i.situacion === "recibido_no_sirve").map((i) => [i.tipo, i.detalle]),
-  );
+  const estadosCasilla = Object.fromEntries(pendientes.filter((i) => i.situacion === "recibido_no_sirve").map((i) => [i.tipo, i.detalle]));
+
+  // Línea de tiempo: en qué paso va la persona
+  const paso = r.estado === "cerrado" ? 4 : r.estado === "completo" ? 3 : enProceso ? 1 : 2;
+  const pasos = [
+    { t: "Recibimos su reclamación", d: `Radicada el ${fechaLarga(r.radicado_at)}.` },
+    { t: "Revisamos sus documentos", d: paso === 2 ? "Le indicamos abajo qué falta o qué hay que corregir." : "Verificamos que cada documento esté completo y sea legible." },
+    { t: "Expediente completo", d: r.fecha_vencimiento ? `La aseguradora tiene plazo para responderle hasta el ${fechaLarga(r.fecha_vencimiento)}.` : "Desde ese momento empieza a correr el plazo de respuesta." },
+    { t: "Respuesta", d: "Le informamos la decisión sobre su reclamación por correo." },
+  ];
+  const nombre = r.beneficiario_nombre.split(" ")[0];
+  const nombreBonito = nombre.charAt(0) + nombre.slice(1).toLowerCase();
 
   return (
-    <div className="rad"><main className="mx-auto max-w-2xl px-4 py-8">
+    <div className="rad">
+      <BarraAvance />
       {enProceso && <Refrescar cadaMs={5000} />}
+      <main className="pagina">
+        {rechazados && <div className="alerta">Algunos archivos no se pudieron recibir: {rechazados}</div>}
 
-      {nuevo && (
-        <div className="tarjeta mb-5 border-green-200 bg-green-50 text-green-900">
-          <p className="font-semibold">Recibimos su reclamación.</p>
-          <p className="mt-1 text-sm">
-            Guarde esta página en sus favoritos: es su enlace personal para ver el avance y enviar documentos, sin usuario
-            ni contraseña. También le enviaremos este enlace por correo.
-          </p>
-        </div>
-      )}
-      {rechazados && (
-        <div className="tarjeta mb-5 border-red-200 bg-red-50 text-sm text-red-800">
-          Algunos archivos no se pudieron recibir: {rechazados}
-        </div>
-      )}
-
-      <p className="text-sm font-semibold uppercase tracking-wide text-marca">Reclamación {r.radicado}</p>
-      <h1 className="mt-1 text-2xl font-bold text-gray-900">Hola, {r.beneficiario_nombre.split(" ")[0]}</h1>
-
-      <section className="tarjeta mt-5">
-        {r.estado === "cerrado" ? (
-          <p>
-            Su reclamación ya tiene una decisión. Le enviamos el detalle a su correo. Si tiene dudas, comuníquese con nuestra línea de atención.
-          </p>
-        ) : enProceso ? (
-          <p className="flex items-center gap-2">
-            <span className="inline-block h-3 w-3 animate-pulse rounded-full bg-marca" />
-            Estamos revisando sus documentos. Esto suele tardar menos de un minuto; esta página se actualiza sola.
-          </p>
-        ) : r.estado === "completo" ? (
-          <div>
-            <p className="font-semibold text-green-800">Su expediente está completo.</p>
-            <p className="mt-1 text-sm text-gray-600">
-              Un analista lo está estudiando. La aseguradora tiene plazo para darle una respuesta hasta el{" "}
-              <strong>{r.fecha_vencimiento ? fecha(r.fecha_vencimiento) : "—"}</strong>. No necesita enviar nada más por ahora.
-            </p>
-          </div>
-        ) : r.estado === "revision_manual" && !pendientes.length ? (
-          <p>Un analista está revisando su caso personalmente. Le escribiremos si necesitamos algo más.</p>
-        ) : (
-          <div>
-            <p className="font-semibold text-gray-900">
-              Para continuar nos falta{pendientes.length > 1 ? "n" : ""} {pendientes.length} documento{pendientes.length > 1 ? "s" : ""}.
-            </p>
-            <p className="mt-1 text-sm text-gray-600">
-              El plazo de respuesta de la aseguradora empieza a contar cuando su expediente esté completo.
-            </p>
-          </div>
-        )}
-      </section>
-
-      {decision?.decision === "pedir_documentos" && r.estado !== "cerrado" && (
-        <section className="tarjeta mt-4 border-amber-300 bg-amber-50 text-sm">
-          <p className="font-semibold">El analista le solicitó documentos adicionales:</p>
-          <ul className="mt-1 list-disc pl-5">
-            {(decision.documentos_solicitados ?? []).map((t: keyof typeof NOMBRE_DOCUMENTO) => <li key={t}>{NOMBRE_DOCUMENTO[t]}</li>)}
-          </ul>
-        </section>
-      )}
-
-      {evaluacion && (
-        <section className="mt-6">
-          <h2 className="mb-3 text-lg font-semibold">Sus documentos</h2>
-          <ul className="space-y-2">
-            {evaluacion.checklist.map((i) => (
-              <li key={i.tipo} className={`rounded-lg border p-3 ${COLOR[i.situacion]}`}>
-                <p className="font-medium">
-                  <span className="mr-2" aria-hidden>{ICONO[i.situacion]}</span>
-                  {i.nombre}
-                </p>
-                {i.situacion !== "recibido_valido" && <p className="mt-1 pl-7 text-sm text-gray-700">{i.detalle}</p>}
-              </li>
-            ))}
-          </ul>
-          {noReconocidos.length > 0 && (
-            <p className="mt-3 text-sm text-gray-600">
-              También recibimos {noReconocidos.length} archivo(s) que no logramos leer o identificar ({noReconocidos.map((d) => d.nombre_original).join(", ")}).
-              Si era alguno de los documentos de la lista, vuelva a enviarlo en su casilla con una foto más nítida.
-            </p>
+        <section className="tarjeta-rad fade">
+          {nuevo ? (
+            <>
+              <div className="ok-ic"><IcoCheck /></div>
+              <h2>Hemos recibido su reclamación</h2>
+              <p style={{ color: "var(--muted)", margin: "0 0 14px" }}>
+                Gracias por confiarnos este momento, {nombreBonito}. Le enviamos la confirmación a <b>{r.beneficiario_email}</b>.
+              </p>
+            </>
+          ) : (
+            <>
+              <div className="eyebrow">Seguimiento de su reclamación</div>
+              <h2 style={{ marginTop: 6 }}>Hola, {nombreBonito}</h2>
+            </>
           )}
-        </section>
-      )}
+          <div className="eyebrow" style={{ marginTop: 8 }}>Número de radicado</div>
+          <div className="radicado">{r.radicado}</div>
 
-      {r.estado !== "cerrado" && (
-        <section className="mt-6">
-          <h2 className="mb-3 text-lg font-semibold">Enviar más documentos</h2>
-          <SubirMas token={token} pendientes={casillasPendientes} estados={estadosCasilla} />
-        </section>
-      )}
+          {/* Estado actual en lenguaje claro */}
+          {r.estado === "cerrado" ? (
+            <div className="estado-box ok">Su reclamación ya tiene una decisión. Le enviamos el detalle a su correo.</div>
+          ) : enProceso ? (
+            <div className="estado-box info"><span className="pulso" />Estamos revisando sus documentos. Suele tardar menos de un minuto; esta página se actualiza sola.</div>
+          ) : r.estado === "completo" ? (
+            <div className="estado-box ok">
+              <b>Su expediente está completo.</b> Un analista lo está estudiando. No necesita enviar nada más por ahora.
+            </div>
+          ) : r.estado === "revision_manual" && !pendientes.length ? (
+            <div className="estado-box info">Un analista está revisando su caso personalmente. Le escribiremos si necesitamos algo más.</div>
+          ) : (
+            <div className="estado-box pend">
+              <b>Para continuar nos falta{pendientes.length > 1 ? "n" : ""} {pendientes.length} documento{pendientes.length > 1 ? "s" : ""}.</b>{" "}
+              Puede enviarlos abajo, cuando los tenga. El plazo de respuesta empieza a contar cuando su expediente esté completo.
+            </div>
+          )}
 
-      <p className="mt-10 text-center text-xs text-gray-500">
-        Radicada el {new Date(r.radicado_at).toLocaleDateString("es-CO", { day: "numeric", month: "long", year: "numeric" })} · No comparta este enlace.
-      </p>
-    </main></div>
+          <ol className="tl">
+            {pasos.map((p, i) => {
+              const n = i + 1;
+              const clase = n < paso || paso === 4 ? "hecho" : n === paso ? "actual" : "";
+              return (
+                <li key={p.t} className={clase}>
+                  <span className="n">{clase === "hecho" ? <IcoCheck /> : n}</span>
+                  <span><b>{p.t}</b><span className="d">{p.d}</span></span>
+                </li>
+              );
+            })}
+          </ol>
+        </section>
+
+        {decision?.decision === "pedir_documentos" && r.estado !== "cerrado" && (
+          <section className="tarjeta-rad">
+            <h2 style={{ fontSize: 18 }}>El analista le solicitó documentos adicionales</h2>
+            <ul style={{ margin: "8px 0 0", paddingLeft: 20 }}>
+              {(decision.documentos_solicitados ?? []).map((t: keyof typeof NOMBRE_DOCUMENTO) => <li key={t}>{NOMBRE_DOCUMENTO[t]}</li>)}
+            </ul>
+          </section>
+        )}
+
+        {evaluacion && !enProceso && (
+          <section className="tarjeta-rad">
+            <h2 style={{ fontSize: 19 }}>Sus documentos</h2>
+            <p style={{ color: "var(--muted)", margin: "0 0 14px", fontSize: 14.5 }}>
+              {evaluacion.checklist.filter((i) => i.situacion === "recibido_valido").length} de {evaluacion.checklist.length} recibidos y revisados.
+            </p>
+            {evaluacion.checklist.map((i) => (
+              <div key={i.tipo} className={`item ${i.situacion === "recibido_valido" ? "ok" : i.situacion === "recibido_no_sirve" ? "mal" : ""}`}>
+                <span className="st">{i.situacion === "recibido_valido" ? <IcoCheck /> : i.situacion === "recibido_no_sirve" ? <IcoAlerta /> : <IcoDoc />}</span>
+                <span>
+                  <b>{i.nombre}</b>
+                  {i.situacion !== "recibido_valido" && <span className="d">{i.situacion === "falta" ? `Aún no lo recibimos. ${i.detalle}` : i.detalle}</span>}
+                </span>
+              </div>
+            ))}
+            {noReconocidos.length > 0 && (
+              <div className="hint" style={{ marginTop: 12 }}>
+                <span>
+                  También recibimos {noReconocidos.length} archivo(s) que no logramos leer o identificar ({noReconocidos.map((d) => d.nombre_original).join(", ")}).
+                  Si era alguno de los documentos de la lista, vuelva a enviarlo en su casilla con una foto más nítida.
+                </span>
+              </div>
+            )}
+          </section>
+        )}
+
+        {r.estado !== "cerrado" && !enProceso && (
+          <section className="tarjeta-rad">
+            <h2 style={{ fontSize: 19 }}>Enviar documentos</h2>
+            <p style={{ color: "var(--muted)", margin: "0 0 16px", fontSize: 14.5 }}>Súbalos en su casilla. Puede volver a esta página cuantas veces necesite.</p>
+            <SubirMas token={token} pendientes={casillasPendientes} estados={estadosCasilla} />
+          </section>
+        )}
+
+        <p className="pie">Este enlace es personal: no lo comparta. No necesita usuario ni contraseña.</p>
+      </main>
+    </div>
   );
 }

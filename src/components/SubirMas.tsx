@@ -48,7 +48,7 @@ export default function SubirMas({ token, pendientes, estados }: { token: string
   }
 
   return (
-    <div className="space-y-4">
+    <div style={{ display: "grid", gap: 14 }}>
       <SubirPorCasillas valor={archivos} onChange={setArchivos} recomendados={pendientes.length ? (pendientes as TipoDocumento[]) : null}
         textoRecomendados="Estos son los documentos que nos faltan o que hay que corregir." avisos={estados} />
       {lista.length > 0 && (
@@ -56,8 +56,8 @@ export default function SubirMas({ token, pendientes, estados }: { token: string
           {enviando ? estado ?? "Enviando…" : `Enviar ${lista.length} documento(s)`}
         </button>
       )}
-      {!enviando && estado && <p className="rounded-lg bg-green-50 p-3 text-sm text-green-800">{estado}</p>}
-      {error && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
+      {!enviando && estado && <div className="estado-box ok" style={{ marginTop: 0 }}>{estado}</div>}
+      {error && <div className="alerta">{error}</div>}
     </div>
   );
 }
